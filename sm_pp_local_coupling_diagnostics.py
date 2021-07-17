@@ -558,18 +558,18 @@ for model in models.keys():
     timename='time'
     if model=='JRA-55': timename='initial_time0_hours'
 
-    # condicion de que el máximo esté en el pixel central
-    def peak_local_max2(x):
-        return peak_local_max(np.asarray(x), indices=False)
-
     lat_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lat" in coord][0]
     lon_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lon" in coord][0]
     
+    # condicion de que el máximo esté en el pixel central
+
     iteration = list(itertools.product(range(-box_size2[0],box_size2[0]+1), repeat=2))
     iteration.remove((0,0))
     pre_cond1 = math.prod([data_aft[model]['pre'].shift({lat_name:ii, lon_name:jj})<data_aft[model]['pre'] for ii,jj in iteration])
     
     # deprecated
+    # def peak_local_max2(x):
+    #     return peak_local_max(np.asarray(x), indices=False)
     # pre_cond1bis = xr.apply_ufunc(peak_local_max2, data_aft[model]['pre'], input_core_dims=[[lat_name, lon_name]], output_core_dims=[[lat_name, lon_name]], vectorize=True, dask='parallelized', 
     #                                                                                                                             dask_gufunc_kwargs={'allow_rechunk':True})
 
@@ -661,6 +661,9 @@ for model in models.keys():
                                            dask_gufunc_kwargs={'allow_rechunk':True})
     
     ######################## PRUEBA
+    
+    
+    
     def reduce_set_events2(point):
         try:
             return np.array(list(item for item in set.union(*np.asarray(point[point != np.array(None)]))))
@@ -683,7 +686,7 @@ for model in models.keys():
     print('Computing Yt_e')
     init_time = timeit.time.time()
 
-    yt_e_condition_mask = pre_cond_event[model]*(mask[model]==1)
+    yt_e_condition_mask = (pre_cond_event[model]==1)*mask[model]
     yt_e[model] = data_mor[model]['sm1'].where(yt_e_condition_mask)
     
     print(str(round((timeit.time.time()-init_time)/60,2))+' min')
