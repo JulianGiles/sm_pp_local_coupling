@@ -661,8 +661,40 @@ for model in models.keys():
                                            dask_gufunc_kwargs={'allow_rechunk':True})
     
     ######################## PRUEBA
-    
-    
+    if ys_calculation_type == 'min':
+        neighboring_pre = xr.concat([data_aft[model]['pre'].shift({lat_name:ii, lon_name:jj}) for ii,jj in iteration], dim='evtypes').transpose(timename, 'evtypes', lat_name, lon_name)
+        neighboring_pre_mins = neighboring_pre.min('evtypes')
+        
+        # Saving and reloading
+        neighboring_pre.to_netcdf(temp_path+'/neighboring_pre_'+model+'.nc')
+        neighboring_pre_mins.to_netcdf(temp_path+'/neighboring_pre_mins_'+model+'.nc')
+
+        neighboring_pre = xr.open_dataarray(temp_path+'/neighboring_pre_'+model+'.nc')
+        neighboring_pre_mins = xr.open_dataarray(temp_path+'/neighboring_pre_mins_'+model+'.nc')
+
+        
+        def compare(array1, array2):
+            return array1==array2
+        
+        neighboring_pre_minspos = xr.apply_ufunc(compare, neighboring_pre, neighboring_pre_mins,
+                                                input_core_dims=[[timename, lat_name, lon_name], [timename, lat_name, lon_name]],
+                                                output_core_dims=[[timename, lat_name, lon_name]],
+                                                vectorize=True, dask='parallelized', 
+                                                dask_gufunc_kwargs={'allow_rechunk':True}).transpose(timename, 'evtypes', lat_name, lon_name)
+        
+        neighboring_sm = xr.concat([data_mor[model]['sm1'].shift({lat_name:ii, lon_name:jj}) for ii,jj in iteration], dim='evtypes').transpose(timename, 'evtypes', lat_name, lon_name)
+
+        # Saving and reloading
+        neighboring_pre_minspos.to_netcdf(temp_path+'/neighboring_pre_minspos_'+model+'.nc')
+        neighboring_sm.to_netcdf(temp_path+'/neighboring_sm_'+model+'.nc')
+
+        neighboring_pre_minspos = xr.open_dataarray(temp_path+'/neighboring_pre_minspos_'+model+'.nc')
+        neighboring_sm = xr.open_dataarray(temp_path+'/neighboring_sm_'+model+'.nc')
+
+
+        #cambiarnombres
+        ys_e2 = data_mor[model]['sm1'].where(mask[model]).where(pre_cond_event[model]) - neighboring_sm.where(neighboring_pre_minspos).mean(dim='evtypes')
+        yh_e2 = data_mor[model]['sm1'].where(mask[model]).where(pre_cond_event[model]) - xr.concat([neighboring_sm, data_mor[model]['sm1']], dim='evtypes').std(dim='evtypes')
     
     def reduce_set_events2(point):
         try:
@@ -675,7 +707,7 @@ for model in models.keys():
     for i in range(len(lat[model])):
         for j in range(len(lon[model])):
             positions = reduce_set_events2(aux_events[:,i,j]).shape
-            ys_event_types2[0:positions[0],:,i,j] = reduce_set_events2(aux_events[:,i,j])
+            ys_event_types2[0:positions[0],:,i,j] = reduce_set_events2(aux_events[:,i,j])-[box_size2[0],box_size2[1]] #paso al sistema de ref centrado
     
     ######################## FIN PRUEBA
 
@@ -766,7 +798,32 @@ for model in models.keys():
     
     ########################### FIN PRUEBA
     
+    ########################### PRUEBA 2
+    init_time = timeit.time.time()
     
+    if ys_calculation_type == 'min':
+        # array movido de los datos alrededor del punto central
+        
+        ys_c2 = xr.concat([data_mor[model]['sm1'].where(pre_cond_nonevent*mask[model]) - data_mor[model]['sm1'].shift({lat_name:ii*-1, lon_name:jj*-1}).where(((ys_event_types2[:,0,:,:]==ii)*(ys_event_types2[:,1,:,:]==jj)).sum(axis=0)) for ii,jj in iteration], dim='evtypes').transpose(timename, 'evtypes', lat_name, lon_name)
+        
+        yh_c2 = xr.concat([data_mor[model]['sm1'].where(pre_cond_nonevent*mask[model])] + [data_mor[model]['sm1'].shift({lat_name:ii*-1, lon_name:jj*-1}) for ii,jj in iteration], dim='evtypes').std(dim='evtypes')
+        
+        yt_c2 = data_mor[model]['sm1'].where(pre_cond_nonevent*mask[model])
+
+     # Guardo los resultados:
+    init_time = timeit.time.time()
+    print('Saving arrays in temp')
+    ys_c2.to_netcdf(temp_path+'/ys_c2_'+model+'.nc')
+    yt_c2.to_netcdf(temp_path+'/yt_c2_'+model+'.nc')
+    yh_c2.to_netcdf(temp_path+'/yh_c2_'+model+'.nc')
+    print(str(round((timeit.time.time()-init_time)/60,2))+' min')
+    
+    print('reloading results')
+
+    print(str(round((timeit.time.time()-init_time)/60,2))+' min')
+    ########################### FIN PRUEBA 2
+
+
     if ys_calculation_type == 'min':   
         def calculo_no_events(data_mor, pre_cond_nonevent):
         
