@@ -194,7 +194,7 @@ pre_multipliers = 1#/1000  # para acomodar las unidades de precipitación. Ej: E
 if 'ERA5' in models: pre_multipliers = 1/1000
 
 ys_calculation_type = 'min' # 'min' for comparison against min P point, 'mean' for comparison against sorrounding mean 
-delta_period = ('1998-01-01', '2012-12-31') # (start_date, end_date) Período sobre el cual calcular los deltas (puedo tener todo el proceso de eventos hecho para un periodo mas largo y dsps elegir sub periodo para los delta finales)
+delta_period = ('1983-01-01', '2012-12-31') # (start_date, end_date) Período sobre el cual calcular los deltas (puedo tener todo el proceso de eventos hecho para un periodo mas largo y dsps elegir sub periodo para los delta finales)
 load_deltas = False # load previously calculated deltas?
 seas = set([10,11,12,1,2,3]) # set([12,1,2])# set([4,5,6,7,8,9]) # set([1,2,3,10,11,12]) # En que meses quiero la estacion a considerar (incluidos)
 seas_name = 'ONDJFM' # Para los títulos
@@ -203,6 +203,8 @@ seas_name = 'ONDJFM' # Para los títulos
 rango_sm = (6,11) # Rango de horas para SM (en la mañana)
 rango_pre_mor = (6,11) # Rango de horas para pre (en la mañana) Tener en cuenta que es el acumulado
 rango_pre_aft = (12,23) # Rango de horas para pre (en la tarde)
+if 'RCA4' in models: rango_sm = (6,8); rango_pre_mor = (6,8); rango_pre_aft = (9,20)
+
 pre_mor_max = 1*pre_multipliers # Máxima prec en la mañana en mm
 pre_aft_min = 4*pre_multipliers # Mínima prec en la tarde en mm
 
@@ -219,6 +221,8 @@ n_rollmean = 21 # nro de dias de referencia para tomar la anomalia (si es centra
 sm_roll_mean_center = True # si tomar la anomalia de SM respecto a la rolling mean centrada (True) o para atras (False), para quitar los bias estacionales
 
 seas_expect_smanom = True # la anomalia de SM es respecto a la seasonal expectation (Petrova, tomado de Taylor): roll mean centrada de 21 dias y promediada en los años menos en el año del evento
+if seas_expect_smanom: sm_roll_mean_center = True
+
 dayofyear_smanom = False # si hacer la anomalia de SM respecto a la climatología para ese dia del año. Si False, entonces hacer la rolling mean
 previous_day_sm = False # calcula usando la SM promedio del dia previo en lugar de por la mañana (usa datos diarios de SM)
 
@@ -546,32 +550,19 @@ for model in models.keys():
     print('..... '+model+' ....')
     print('Processing conditions') 
     init_time = timeit.time.time()           
-
-    # ys_e[model] = np.empty(sm_daily_rm[model].shape); ys_e[model].fill(np.nan)
-    # yt_e[model] = np.empty(sm_daily_rm[model].shape); yt_e[model].fill(np.nan)
-    # yh_e[model] = np.empty(sm_daily_rm[model].shape); yh_e[model].fill(np.nan)
-    # ys_event_types[model] = np.empty((len(lat[model]), len(lon[model])), dtype=object)
-    
-    # for i,j in valid_gridpoints[model]:
-    #     ys_event_types[model][i,j] = set()
     
     timename='time'
     if model=='JRA-55': timename='initial_time0_hours'
 
-    # condicion de que el máximo esté en el pixel central
-    def peak_local_max2(x):
-        return peak_local_max(np.asarray(x), indices=False)
-
     lat_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lat" in coord][0]
     lon_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lon" in coord][0]
     
+    # condicion de que el máximo esté en el pixel central
+
     iteration = list(itertools.product(range(-box_size2[0],box_size2[0]+1), repeat=2))
     iteration.remove((0,0))
     pre_cond1 = math.prod([data_aft[model]['pre'].shift({lat_name:ii, lon_name:jj})<data_aft[model]['pre'] for ii,jj in iteration])
     
-    # deprecated
-    # pre_cond1bis = xr.apply_ufunc(peak_local_max2, data_aft[model]['pre'], input_core_dims=[[lat_name, lon_name]], output_core_dims=[[lat_name, lon_name]], vectorize=True, dask='parallelized', 
-    #                                                                                                                             dask_gufunc_kwargs={'allow_rechunk':True})
 
     # condicion de no precip por la mañana en ningun punto de la caja (<pre_mor_max)
     pre_cond11 = math.prod([data_mor[model]['pre'].shift({lat_name:ii, lon_name:jj})<pre_mor_max for ii,jj in list(itertools.product(range(-box_size2[0],box_size2[0]+1), repeat=2))])
@@ -659,31 +650,17 @@ for model in models.keys():
     
     ys_event_types[model] = xr.apply_ufunc(reduce_set_events, aux_events, input_core_dims=[[timename]], output_core_dims=[[]], vectorize=True, dask='parallelized', 
                                            dask_gufunc_kwargs={'allow_rechunk':True})
-    
-    ######################## PRUEBA
-    def reduce_set_events2(point):
-        try:
-            return np.array(list(item for item in set.union(*np.asarray(point[point != np.array(None)]))))
-        except:
-            return np.array([[np.nan,np.nan]])
-    
-    ys_event_types2 = np.full((box_size[0]*box_size[1]-1, 2, len(lat[model]), len(lon[model])), np.nan)
-    
-    for i in range(len(lat[model])):
-        for j in range(len(lon[model])):
-            positions = reduce_set_events2(aux_events[:,i,j]).shape
-            ys_event_types2[0:positions[0],:,i,j] = reduce_set_events2(aux_events[:,i,j])
-    
-    ######################## FIN PRUEBA
+
 
 
     print(str(round((timeit.time.time()-init_time)/60,2))+' min')
+
     
     # Calculo Yt_e: métrica de preferencia temporal
     print('Computing Yt_e')
     init_time = timeit.time.time()
 
-    yt_e_condition_mask = pre_cond_event[model]*(mask[model]==1)
+    yt_e_condition_mask = (pre_cond_event[model]==1)*mask[model]
     yt_e[model] = data_mor[model]['sm1'].where(yt_e_condition_mask)
     
     print(str(round((timeit.time.time()-init_time)/60,2))+' min')
@@ -731,39 +708,6 @@ for model in models.keys():
     # punto del maximo (central) y la media de los valores en las posiciones de los minimos)
     print('Computing Ys_c, Yh_c & Yt_c')
     
-    ########################### PRUEBA
-    init_time = timeit.time.time()
-
-    ys_c_np = np.full((pre_cond_nonevent.shape[0], box_size[0]*box_size[1]-1, len(lat[model]), len(lon[model])), np.nan)
-    yt_c_np = np.full((pre_cond_nonevent.shape[0], len(lat[model]), len(lon[model])), np.nan)
-    yh_c_np = np.full((pre_cond_nonevent.shape[0], len(lat[model]), len(lon[model])), np.nan)
-    
-    if ys_calculation_type == 'min':
-        for i in range(len(lat[model])):
-            for j in range(len(lon[model])):
-                if mask[model][i,j]:
-                    if (~np.isnan(ys_event_types2[:,0,i,j])).any():
-                        data_mor_evzonecut = data_mor[model]['sm1'][:,i-box_size2[0]:i+box_size2[0]+1, j-box_size2[1]:j+box_size2[1]+1]
-                        for evtype in range(ys_event_types2.shape[0]):
-                            if ~np.isnan(ys_event_types2[evtype,0,i,j]):
-                                ys_c_np[:,evtype,i,j] = np.asarray(data_mor[model]['sm1'][:,i,j].where(pre_cond_nonevent[:,i,j]) - data_mor_evzonecut[:,int(ys_event_types2[evtype,0,i,j]),int(ys_event_types2[evtype,1,i,j]) ] )
-
-
-                        yh_c_np[:,i,j] = np.asarray(np.std(data_mor_evzonecut.where(pre_cond_nonevent[:,i,j]), axis=(1,2)))
-                        
-                        yt_c_np[:,i,j] = np.asarray(data_mor[model]['sm1'][:,i,j].where(pre_cond_nonevent[:,i,j]))
-    
-    # creo xarrays
-    ys_c[model] = xr.DataArray(data=ys_c_np, dims=[timename, 'evtypes', lat_name, lon_name], coords={timename:data_mor[model]['sm1'][timename], lat_name:data_mor[model]['sm1'][lat_name], lon_name:data_mor[model]['sm1'][lon_name]})
-    yt_c[model] = data_mor[model]['sm1'].copy(data= yt_c_np)
-    yh_c[model] = data_mor[model]['sm1'].copy(data= yh_c_np)
-    
-    
-    print(str(round((timeit.time.time()-init_time)/60,2))+' min')
-    
-    ########################### FIN PRUEBA
-    
-    
     if ys_calculation_type == 'min':   
         def calculo_no_events(data_mor, pre_cond_nonevent):
         
@@ -779,7 +723,7 @@ for model in models.keys():
                 ev_number=0
                
                 
-                if pre_cond_nonevent[i,j]:
+                if pre_cond_nonevent[i,j] and i>box_size2[0]-1 and j>box_size2[1]-1 and i<mask[model].shape[0]-(box_size2[0]-1) and j<mask[model].shape[1]-(box_size2[1]-1):
                     for ev_type in ys_event_types[model][i,j]:
                         ys_c[ev_number,i,j] = np.asarray(data_mor[i,j] - data_mor[i-box_size2[0]+ev_type[0], j-box_size2[1]+ev_type[1]])
                         
@@ -803,7 +747,7 @@ for model in models.keys():
             for i,j in zip(np.where(mask[model]==True)[0], np.where(mask[model]==True)[1]):
                
                 
-                if pre_cond_nonevent[i,j]:
+                if pre_cond_nonevent[i,j] and i>box_size2[0]-1 and j>box_size2[1]-1 and i<mask[model].shape[0]-(box_size2[0]-1) and j<mask[model].shape[1]-(box_size2[1]-1):
                         
                     ys_c[0,i,j] = np.asarray(data_mor[i,j] - np.mean(data_mor[(i-box_size2[0]):(i+box_size2[0]+1), (j-box_size2[1]):(j+box_size2[1]+1)][np.where(data_mor[(i-box_size2[0]):(i+box_size2[0]+1), (j-box_size2[1]):(j+box_size2[1]+1)]!=data_mor[i, j])]))
     
@@ -847,6 +791,8 @@ for model in models.keys():
     ys_c[model] = xr.open_dataarray(temp_path+'/ys_c_'+model+'.nc', chunks={timename:-1})
     yt_c[model] = xr.open_dataarray(temp_path+'/yt_c_'+model+'.nc', chunks={timename:-1})
     yh_c[model] = xr.open_dataarray(temp_path+'/yh_c_'+model+'.nc', chunks={timename:-1})
+
+
 
 
 #%% -------------------- RECORTO LA ESTACIÓN DESEADA  --------
@@ -1291,6 +1237,8 @@ for model in models.keys():
             delta_ys_dynreg[model][dr] = xr.open_dataarray(temp_path+'/delta_ys_dynreg_'+model+'_'+delta_period[0]+'-'+delta_period[1]+'_'+dr+'.nc')
             delta_yt_dynreg[model][dr] = xr.open_dataarray(temp_path+'/delta_yt_dynreg_'+model+'_'+delta_period[0]+'-'+delta_period[1]+'_'+dr+'.nc')
             delta_yh_dynreg[model][dr] = xr.open_dataarray(temp_path+'/delta_yh_dynreg_'+model+'_'+delta_period[0]+'-'+delta_period[1]+'_'+dr+'.nc')
+
+
 
 #%% ------------  PLOTS (pcolormesh) ---------------
 ############################################
