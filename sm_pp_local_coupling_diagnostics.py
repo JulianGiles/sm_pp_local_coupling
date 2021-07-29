@@ -26,6 +26,7 @@ Created on Thu Apr 12 10:54:12 2018
 #             Added new SM anomaly calculation option (with respect to the seasonal expectation: average 21-day rolling mean for that day of the year, without considering event year)
 # Version 13: Missing feature added: now events with morning P>pre_mor_max in adjacent tiles are also filtered out. 
 #             Improvements to speed with wrapping of xr.apply_ufunc and new event detection method
+# Version 14: Missing feature added: now non-events with morning P>pre_mor_max in adjacent tiles are also filtered out. 
 
 
 
@@ -113,8 +114,8 @@ seas_warm = [1,2,3,10,11,12] # En que meses quiero la estacion a considerar (inc
 seas_cold = [4,5,6,7,8,9]
 homepath = '/home/julian.giles/datos/'
 data_path = '/datosfreyja/d1/GDATA/'
-temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run7.3_v13'
-images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run7.3_v13/'
+temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run9_v14'
+images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run9_v14/'
 font_size = 20 # font size for all elements
 proj = ccrs.PlateCarree(central_longitude=0.0)  # Proyeccion cyl eq
 
@@ -213,14 +214,15 @@ box_size = (3,3) # Dimensiones (horizontal,vertical) de la caja de los eventos (
 box_size2 = (int((box_size[0]-1)/2), int((box_size[1]-1)/2)) # para uso en el calculo
 bootslength = 1000 # Cantidad de valores del bootstrapping
 min_events = 25 # minimo de eventos que tiene que haber para plotear el resultado (solo aplica a los graficos)
+
 degrade = True # degradar la reticula para agrupar eventos?
 degrade_n = 6 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
 if degrade_n >0: degrade =True
 
-n_rollmean = 21 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
+n_rollmean = 31 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
 sm_roll_mean_center = True # si tomar la anomalia de SM respecto a la rolling mean centrada (True) o para atras (False), para quitar los bias estacionales
 
-seas_expect_smanom = True # la anomalia de SM es respecto a la seasonal expectation (Petrova, tomado de Taylor): roll mean centrada de 21 dias y promediada en los años menos en el año del evento
+seas_expect_smanom = False # la anomalia de SM es respecto a la seasonal expectation (Petrova, tomado de Taylor): roll mean centrada de 21 dias y promediada en los años menos en el año del evento
 if seas_expect_smanom: sm_roll_mean_center = True
 
 dayofyear_smanom = False # si hacer la anomalia de SM respecto a la climatología para ese dia del año. Si False, entonces hacer la rolling mean
@@ -723,7 +725,7 @@ for model in models.keys():
                 ev_number=0
                
                 
-                if pre_cond_nonevent[i,j] and i>box_size2[0]-1 and j>box_size2[1]-1 and i<mask[model].shape[0]-(box_size2[0]-1) and j<mask[model].shape[1]-(box_size2[1]-1):
+                if pre_cond_nonevent[(i-box_size2[0]):(i+box_size2[0]+1), (j-box_size2[1]):(j+box_size2[1]+1)].all() and i>box_size2[0]-1 and j>box_size2[1]-1 and i<mask[model].shape[0]-(box_size2[0]-1) and j<mask[model].shape[1]-(box_size2[1]-1):
                     for ev_type in ys_event_types[model][i,j]:
                         ys_c[ev_number,i,j] = np.asarray(data_mor[i,j] - data_mor[i-box_size2[0]+ev_type[0], j-box_size2[1]+ev_type[1]])
                         
@@ -747,7 +749,7 @@ for model in models.keys():
             for i,j in zip(np.where(mask[model]==True)[0], np.where(mask[model]==True)[1]):
                
                 
-                if pre_cond_nonevent[i,j] and i>box_size2[0]-1 and j>box_size2[1]-1 and i<mask[model].shape[0]-(box_size2[0]-1) and j<mask[model].shape[1]-(box_size2[1]-1):
+                if pre_cond_nonevent[(i-box_size2[0]):(i+box_size2[0]+1), (j-box_size2[1]):(j+box_size2[1]+1)].all() and i>box_size2[0]-1 and j>box_size2[1]-1 and i<mask[model].shape[0]-(box_size2[0]-1) and j<mask[model].shape[1]-(box_size2[1]-1):
                         
                     ys_c[0,i,j] = np.asarray(data_mor[i,j] - np.mean(data_mor[(i-box_size2[0]):(i+box_size2[0]+1), (j-box_size2[1]):(j+box_size2[1]+1)][np.where(data_mor[(i-box_size2[0]):(i+box_size2[0]+1), (j-box_size2[1]):(j+box_size2[1]+1)]!=data_mor[i, j])]))
     
