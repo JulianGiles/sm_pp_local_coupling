@@ -27,6 +27,7 @@ Created on Thu Apr 12 10:54:12 2018
 # Version 13: Missing feature added: now events with morning P>pre_mor_max in adjacent tiles are also filtered out. 
 #             Improvements to speed with wrapping of xr.apply_ufunc and new event detection method
 # Version 14: Missing feature added: now non-events with morning P>pre_mor_max in adjacent tiles are also filtered out. 
+# Version 15: minor bug fixed: SM anomalies calculated only from morning values (instead of daily averages)
 
 
 
@@ -94,13 +95,13 @@ start_date = '1983-01-01'
 end_date = '2012-12-31'
 
 models = {
-#          'RCA4': "RCA4 "+start_date[0:4]+"-"+end_date[0:4],
-#          'RCA4CLIM': "RCA4CLIM "+start_date[0:4]+"-"+end_date[0:4],
+          'RCA4': "RCA4 "+start_date[0:4]+"-"+end_date[0:4],
+          'RCA4CLIM': "RCA4CLIM "+start_date[0:4]+"-"+end_date[0:4],
 #          'LMDZ': "LMDZ "+start_date[0:4]+"-"+end_date[0:4],
 #          'TRMM-3B42': "TRMM-3B42 V7 1998-2012",
 #          'CMORPH': "CMORPH V1.0 1998-2012",
 #          'JRA-55': "JRA-55 "+start_date[0:4]+"-"+end_date[0:4],
-          'ERA5': "ERA5 "+start_date[0:4]+"-"+end_date[0:4],
+#          'ERA5': "ERA5 "+start_date[0:4]+"-"+end_date[0:4],
 #          'GLEAM': "GLEAM "+start_date[0:4]+"-"+end_date[0:4],
 #          'ESACCI': "ESA-CCI "+start_date[0:4]+"-"+end_date[0:4],
           }
@@ -114,8 +115,8 @@ seas_warm = [1,2,3,10,11,12] # En que meses quiero la estacion a considerar (inc
 seas_cold = [4,5,6,7,8,9]
 homepath = '/home/julian.giles/datos/'
 data_path = '/datosfreyja/d1/GDATA/'
-temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run9_v14'
-images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run9_v14/'
+temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run7.1_v15'
+images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run7.1_v15/'
 font_size = 20 # font size for all elements
 proj = ccrs.PlateCarree(central_longitude=0.0)  # Proyeccion cyl eq
 
@@ -209,18 +210,18 @@ if 'RCA4' in models: rango_sm = (6,8); rango_pre_mor = (6,8); rango_pre_aft = (9
 pre_mor_max = 1*pre_multipliers # Máxima prec en la mañana en mm
 pre_aft_min = 4*pre_multipliers # Mínima prec en la tarde en mm
 
-delta_orog_lim = 180  # Máximo cambio en orografía admitido dentro de la caja 3x3 en metros (para 0.25 seria 180, para 0.5 seria 360)
+delta_orog_lim = 360  # Máximo cambio en orografía admitido dentro de la caja 3x3 en metros (para 0.25 seria 180, para 0.5 seria 360)
 box_size = (3,3) # Dimensiones (horizontal,vertical) de la caja de los eventos (en puntos de grilla) 
 box_size2 = (int((box_size[0]-1)/2), int((box_size[1]-1)/2)) # para uso en el calculo
 bootslength = 1000 # Cantidad de valores del bootstrapping
 min_events = 25 # minimo de eventos que tiene que haber para plotear el resultado (solo aplica a los graficos)
 
-degrade = True # degradar la reticula para agrupar eventos?
-degrade_n = 6 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
+degrade = False # degradar la reticula para agrupar eventos?
+degrade_n = 0 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
 if degrade_n >0: degrade =True
 
-n_rollmean = 31 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
-sm_roll_mean_center = True # si tomar la anomalia de SM respecto a la rolling mean centrada (True) o para atras (False), para quitar los bias estacionales
+n_rollmean = 15 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
+sm_roll_mean_center = False # si tomar la anomalia de SM respecto a la rolling mean centrada (True) o para atras (False), para quitar los bias estacionales
 
 seas_expect_smanom = False # la anomalia de SM es respecto a la seasonal expectation (Petrova, tomado de Taylor): roll mean centrada de 21 dias y promediada en los años menos en el año del evento
 if seas_expect_smanom: sm_roll_mean_center = True
@@ -488,11 +489,13 @@ for model in models.keys():
             sm_daily_rm[model] = sm_daily[model].rolling({timename:n_rollmean}, center=sm_roll_mean_center, min_periods=15).mean().compute()
     else:
         # muevo el tiempo de sm1 a LST (aprox)
-        data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] - 4*3600000000000
-        sm_daily[model] = data[model]['sm1'][''].resample({timename:'D'}).mean().compute()
-        data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] + 4*3600000000000
-        
+        # data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] - 4*3600000000000
+        # sm_daily[model] = data[model]['sm1'][''].resample({timename:'D'}).mean().compute()
+        # data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] + 4*3600000000000
+        sm_daily[model] = xr.concat([sm_mor[i] for i in timezones], dim=lon_name)
+       
         if dayofyear_smanom:
+            #sm_daily_doy[model] = sm_daily[model].groupby(timename+'.dayofyear').mean(dim=timename, skipna=True) 
             sm_daily_doy[model] = sm_daily[model].groupby(timename+'.dayofyear').mean(dim=timename, skipna=True) 
         elif seas_expect_smanom:
             aux = sm_daily[model].rolling({timename:n_rollmean}, center=sm_roll_mean_center, min_periods=15).mean()         
@@ -526,10 +529,13 @@ for model in models.keys():
                     
     else:
         if dayofyear_smanom:
-            data_mor[model]['sm1'] = xr.concat([sm_mor[i] for i in timezones], dim=lon_name).groupby(timename+'.dayofyear') - sm_daily_doy[model]
+            #data_mor[model]['sm1'] = xr.concat([sm_mor[i] for i in timezones], dim=lon_name).groupby(timename+'.dayofyear') - sm_daily_doy[model]
+            data_mor[model]['sm1'] = sm_daily[model].groupby(timename+'.dayofyear') - sm_daily_doy[model]
+            
         else:
-            data_mor[model]['sm1'] = xr.concat([sm_mor[i] for i in timezones], dim=lon_name) - sm_daily_rm[model]
-        
+            # data_mor[model]['sm1'] = xr.concat([sm_mor[i] for i in timezones], dim=lon_name) - sm_daily_rm[model]
+            data_mor[model]['sm1'] = sm_daily[model] - sm_daily_rm[model]
+
         data_mor[model]['sm1'].to_netcdf(temp_path+'/sm1_mor_'+model+'.nc')
         data_mor[model]['sm1'] = xr.open_dataarray(temp_path+'/sm1_mor_'+model+'.nc')
 
