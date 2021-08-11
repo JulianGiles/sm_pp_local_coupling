@@ -27,7 +27,7 @@ Created on Thu Apr 12 10:54:12 2018
 # Version 13: Missing feature added: now events with morning P>pre_mor_max in adjacent tiles are also filtered out. 
 #             Improvements to speed with wrapping of xr.apply_ufunc and new event detection method
 # Version 14: Missing feature added: now non-events with morning P>pre_mor_max in adjacent tiles are also filtered out. 
-# Version 15: minor bug fixed: SM anomalies calculated only from morning values (instead of daily averages)
+# Version 15: minor bug fixed: SM anomalies calculated only from morning values (instead of daily averages). Forced SM from UNC to be fixed to the mean annual wave.
 
 
 
@@ -75,6 +75,8 @@ from skimage.feature import peak_local_max
 import itertools
 import math
 import timeit
+from scipy import stats
+import collections
 
 import warnings
 #ignore by message
@@ -115,8 +117,8 @@ seas_warm = [1,2,3,10,11,12] # En que meses quiero la estacion a considerar (inc
 seas_cold = [4,5,6,7,8,9]
 homepath = '/home/julian.giles/datos/'
 data_path = '/datosfreyja/d1/GDATA/'
-temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run7.1_v15'
-images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run7.1_v15/'
+temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run5_v15'
+images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run5_v15/'
 font_size = 20 # font size for all elements
 proj = ccrs.PlateCarree(central_longitude=0.0)  # Proyeccion cyl eq
 
@@ -190,7 +192,6 @@ if load_raw:
 matplotlib.rcParams.update({'font.size':font_size}) #Change font size for all elements
 
 
-
 #%% ---------- PARÁMETROS ----------
 pre_multipliers = 1#/1000  # para acomodar las unidades de precipitación. Ej: ERA5 viene en m/h, entonces hay q dividir los umbrales por mil para q sean las mismas unidades
 if 'ERA5' in models: pre_multipliers = 1/1000
@@ -216,18 +217,19 @@ box_size2 = (int((box_size[0]-1)/2), int((box_size[1]-1)/2)) # para uso en el ca
 bootslength = 1000 # Cantidad de valores del bootstrapping
 min_events = 25 # minimo de eventos que tiene que haber para plotear el resultado (solo aplica a los graficos)
 
-degrade = False # degradar la reticula para agrupar eventos?
-degrade_n = 0 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
+degrade = True # degradar la reticula para agrupar eventos?
+degrade_n = 3 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
 if degrade_n >0: degrade =True
 
-n_rollmean = 15 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
-sm_roll_mean_center = False # si tomar la anomalia de SM respecto a la rolling mean centrada (True) o para atras (False), para quitar los bias estacionales
+n_rollmean = 31 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
+sm_roll_mean_center = True # si tomar la anomalia de SM respecto a la rolling mean centrada (True) o para atras (False), para quitar los bias estacionales
 
 seas_expect_smanom = False # la anomalia de SM es respecto a la seasonal expectation (Petrova, tomado de Taylor): roll mean centrada de 21 dias y promediada en los años menos en el año del evento
 if seas_expect_smanom: sm_roll_mean_center = True
 
 dayofyear_smanom = False # si hacer la anomalia de SM respecto a la climatología para ese dia del año. Si False, entonces hacer la rolling mean
 previous_day_sm = False # calcula usando la SM promedio del dia previo en lugar de por la mañana (usa datos diarios de SM)
+
 
 #%% --------- CONSTRUYO EL DATASET MEZCLA DE GLEAM+CMORPH+ERA5 ----------
 
@@ -267,14 +269,14 @@ for model in models.keys():
     print('.... '+model+' ......')
     init_time = timeit.time.time()           
     
-    lat_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lat" in coord][0]
-    lon_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lon" in coord][0]
+    lat_name = [coord for coord in set(data[model]['orog'][''].coords.keys()) if "lat" in coord][0]
+    lon_name = [coord for coord in set(data[model]['orog'][''].coords.keys()) if "lon" in coord][0]
 
     orog_shifted = xr.concat([data[model]['orog'][''][0].shift({lat_name:ii, lon_name:jj})*mult_hd['orog'][model][0] for ii,jj in list(itertools.product(range(-box_size2[0],box_size2[0]+1), repeat=2))], dim='shifted').compute()
     orog_shifted_max = orog_shifted.max(dim='shifted')
     orog_shifted_min = orog_shifted.min(dim='shifted')
     
-    mask[model] = ( ((orog_shifted_max - orog_shifted_min)<delta_orog_lim) * (data[model]['lsmask'][''][0] >0) ).compute()
+    mask[model] = ( ((orog_shifted_max - orog_shifted_min)<delta_orog_lim).values * (data[model]['lsmask'][''][0] >0) ).compute()
     
     print(str(round((timeit.time.time()-init_time)/60,2))+' min')
 
@@ -492,10 +494,10 @@ for model in models.keys():
         # data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] - 4*3600000000000
         # sm_daily[model] = data[model]['sm1'][''].resample({timename:'D'}).mean().compute()
         # data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] + 4*3600000000000
+                
         sm_daily[model] = xr.concat([sm_mor[i] for i in timezones], dim=lon_name)
-       
+
         if dayofyear_smanom:
-            #sm_daily_doy[model] = sm_daily[model].groupby(timename+'.dayofyear').mean(dim=timename, skipna=True) 
             sm_daily_doy[model] = sm_daily[model].groupby(timename+'.dayofyear').mean(dim=timename, skipna=True) 
         elif seas_expect_smanom:
             aux = sm_daily[model].rolling({timename:n_rollmean}, center=sm_roll_mean_center, min_periods=15).mean()         
@@ -686,7 +688,6 @@ for model in models.keys():
     yh_e[model] = xr.open_dataarray(temp_path+'/yh_e_'+model+'.nc', chunks={timename:-1})
     ys_event_types[model] = np.load(temp_path+'/ys_event_types_'+model+'.nc.npy', allow_pickle=True) # el pickle no es forward compatible, cambiar
     
-
 
 #%% ---------- IDENTIFICO LOS NO EVENTOS Y CALCULO LAS METRICAS ------------------
 # Creo los arrays vacios para guardar los datos
@@ -1259,7 +1260,6 @@ for model in models.keys():
 # Plot of delta percentile (pixeled version)
 
 
-from scipy import stats
 
 # calculo los percentiles
 delta_e_ys_perc = dict()
@@ -1534,34 +1534,33 @@ if load_deltas:
     cond_dr=dict()
     ys_e_cut_dg=dict()
     ys_e_cut_dg_dynreg=dict()
+        
+    for model in models.keys():
+        print('... '+model+' ...')
+    
+        timename='time'
+        if model=='JRA-55': timename='initial_time0_hours'
+        
+        lat_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lat" in coord][0]
+        lon_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lon" in coord][0]
+        
+        # calculo los terciles de high/mid/low dynamic regimes
+        auxabs = xr.ufuncs.fabs(data_day_cut[model]['vimfc2d'])
+        data_day_cut_terc = auxabs.quantile([0.33, 0.66], dim=timename)
+        
+        # condicion de los terciles
+        cond_dr[model] = dict()
+        cond_dr[model]['low'] = auxabs<data_day_cut_terc[0]
+        cond_dr[model]['mid'] = (auxabs>data_day_cut_terc[0]) * (auxabs<data_day_cut_terc[1])
+        cond_dr[model]['high'] = auxabs>data_day_cut_terc[1]
 
-    if degrade:
-        print('calculando ys_e_cut_dg')
-        
-        for model in models.keys():
-            print('... '+model+' ...')
-        
-            timename='time'
-            if model=='JRA-55': timename='initial_time0_hours'
-            
-            lat_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lat" in coord][0]
-            lon_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lon" in coord][0]
-            
+        if degrade:
+            print('calculando ys_e_cut_dg')
+
             res_lat = [None if len(ys_e_cut[model][lat_name])%degrade_n==0 else len(ys_e_cut[model][lat_name])%degrade_n*-1][0]
             res_lon = [None if len(ys_e_cut[model][lon_name])%degrade_n==0 else len(ys_e_cut[model][lon_name])%degrade_n*-1][0]
-
+            
             ys_e_cut_dg[model] = xr.concat([ys_e_cut[model][:,i:res_lat:degrade_n,j:res_lon:degrade_n] for i,j in list(itertools.product(range(0,degrade_n), repeat=2))], dim=timename, join='override').compute()
-            
-            
-            # calculo los terciles de high/mid/low dynamic regimes
-            auxabs = xr.ufuncs.fabs(data_day_cut[model]['vimfc2d'])
-            data_day_cut_terc = auxabs.quantile([0.33, 0.66], dim=timename)
-            
-            # condicion de los terciles
-            cond_dr[model] = dict()
-            cond_dr[model]['low'] = auxabs<data_day_cut_terc[0]
-            cond_dr[model]['mid'] = (auxabs>data_day_cut_terc[0]) * (auxabs<data_day_cut_terc[1])
-            cond_dr[model]['high'] = auxabs>data_day_cut_terc[1]
             
             ys_e_cut_dg_dynreg[model]=dict()
             
@@ -2193,6 +2192,7 @@ for seas in ci_seasons:
 
 #%% ####### -----------------------  Temporal distribution of events (events by month)
 if 'SALLJ' in regions.keys(): regions.pop('SALLJ')
+if 'JEXIT' in regions.keys(): regions.pop('JEXIT')
 
 # new array with number of events
 n_events_month = dict()
@@ -2238,6 +2238,7 @@ for model in models.keys():
 #%% ####### -----------------------  Mean trend of P and SM around event (mean daily P and SM)
 
 if 'SALLJ' in regions.keys(): regions.pop('SALLJ')
+if 'JEXIT' in regions.keys(): regions.pop('JEXIT')
 
 
 #creo data_day de pre y sm    
@@ -2290,12 +2291,12 @@ for model in models.keys():
 
 for model in models.keys():
     # crear figura y axes
-    fig1, ax = juli_functions.make_figure('Daily mean P and SM around events \n'+model+' '+seas_name+' '+delta_period[0]+' - '+delta_period[1], figsize=(6,5), general_fontsize=6)
+    fig1, ax = juli_functions.make_figure('Daily mean P and SM around events \n'+model+' '+seas_name+' '+delta_period[0]+' - '+delta_period[1], figsize=(5,5), general_fontsize=6)
     
 
     # Si son muchos plots
     ax.set_visible(False)
-    gs = gridspec.GridSpec(4,4, wspace=0.3, hspace=0.3) #si quiero multiples subplos
+    gs = gridspec.GridSpec(4,3, wspace=0.3, hspace=0.3) #si quiero multiples subplos
     
     n=0
     for m, dr in enumerate(['all', 'low', 'mid', 'high']):
@@ -2306,7 +2307,7 @@ for model in models.keys():
             barax = plt.bar(np.arange(-15,16), pre_trend[model][dr][reg], color='steelblue')
             plt.bar(0, pre_trend[model][dr][reg][15], color='Orange')
             lineax = ax1.twinx()
-            juli_functions.plot_line(lineax, np.arange(-15,16), sm_trend[model][dr][reg], None, None, None, None, None, title=reg, xticksrot = 0, color='red')
+            juli_functions.plot_line(lineax, np.arange(-15,16), sm_trend[model][dr][reg], None, None, None, None, None, title=[reg if n<3 else ''][0], xticksrot = 0, color='red')
             
             
             n=n+1
@@ -2316,9 +2317,191 @@ for model in models.keys():
 
 
 
+#%% ####### -----------------------  Interannual daily mean SM and number of events along the season 
 
 
+for model in models.keys():
+    # crear figura y axes
+    fig1, ax = juli_functions.make_figure('Interannual daily mean SM and number of events in the season \n'+model+' '+seas_name+' '+delta_period[0]+' - '+delta_period[1], figsize=(5,4), general_fontsize=6)
+    
 
+    # Si son muchos plots
+    ax.set_visible(False)
+    gs = gridspec.GridSpec(4,3, wspace=0.5, hspace=0.3) #si quiero multiples subplos
+    
+    n=0
+    for reg in regions.keys(): 
+        # Poner en loop si son muchos plot
+        ax1 = plt.subplot(gs[n])
+        
+        sm_mean = data_mor[model]['sm1'].loc[{timename:slice(delta_period[0], delta_period[1]), lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].groupby(timename+'.dayofyear').mean(dim=(timename, lat_name, lon_name))[:-1]
+        sm_std = data_mor[model]['sm1'].loc[{timename:slice(delta_period[0], delta_period[1]), lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].groupby(timename+'.dayofyear').std(dim=(timename, lat_name, lon_name))[:-1]
+
+        #si quiero la SM absoluta en lugar de las anomalias
+        # sm_mean = data_day[model]['sm1'][''].loc[{timename:slice(delta_period[0], delta_period[1]), lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].groupby(timename+'.dayofyear').mean(dim=(timename, lat_name, lon_name))[:-1]
+        # sm_std = data_day[model]['sm1'][''].loc[{timename:slice(delta_period[0], delta_period[1]), lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].groupby(timename+'.dayofyear').std(dim=(timename, lat_name, lon_name))[:-1]
+        
+        pre_mean = (~np.isnan(ys_e[model])).loc[{timename:slice(delta_period[0], delta_period[1]), lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].groupby(timename+'.dayofyear').sum(dim=(timename, lat_name, lon_name))[:-1]
+        
+        pre_mean_ondjfm = np.concatenate((pre_mean.where(sm_mean.dayofyear>273, drop=True), pre_mean.where(sm_mean.dayofyear<=90, drop=True)))
+        sm_mean_ondjfm = np.concatenate((sm_mean.where(sm_mean.dayofyear>273, drop=True), sm_mean.where(sm_mean.dayofyear<=90, drop=True)))
+        sm_std_ondjfm = np.concatenate((sm_std.where(sm_mean.dayofyear>273, drop=True), sm_std.where(sm_mean.dayofyear<=90, drop=True)))
+        
+        barax = plt.bar(np.arange(1,90+92+1), pre_mean_ondjfm, color='steelblue')
+        lineax = ax1.twinx()
+        plt.fill_between(np.arange(90+92), sm_mean_ondjfm-sm_std_ondjfm, sm_mean_ondjfm+sm_std_ondjfm, color='red', alpha=0.2)
+        juli_functions.plot_line(lineax, np.arange(90+92), sm_mean_ondjfm, None, None, None, None, None, title=[reg if n<3 else ''][0], xticksrot = 0, color='red', lw=0.5)
+        
+        n=n+1
+
+    # save 
+    juli_functions.savefig(fig1, images_path, 'mean_daily_p_sm_season'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
+
+
+#%% ####### -----------------------  Robustez de las distintas formas de calcular los deltas (coincidencia de las distintas metodologías en un mismo dataset)
+
+# hace falta correr la celda  RECORTO LA ESTACION DESEADA
+# Se calcula para degrade=True o degrade=False usando las mismas variables, no diferencia en el calculo. Es decir, no se pueden hacer ambos a la vez.
+
+# load deltas from different methods
+version='15' # version del calculo
+temp_path2 = '/home/julian.giles/datos/temp/heterog_sm_pp/'
+methods = ['9', '7.1', '7.2', '7.3'] #metodos a considerar
+
+thresholds = [10,90]
+
+deltas_e_ys = dict()
+deltas_e_yt = dict()
+deltas_e_yh = dict()
+
+deltas_ys = dict()
+deltas_yt = dict()
+deltas_yh = dict()
+
+deltas_e_ys_perc = dict()
+deltas_e_yt_perc = dict()
+deltas_e_yh_perc = dict()
+
+for model in models.keys():
+    deltas_e_ys[model] = dict()
+    deltas_e_yt[model] = dict()
+    deltas_e_yh[model] = dict()
+    
+    deltas_ys[model] = dict()
+    deltas_yt[model] = dict()
+    deltas_yh[model] = dict()
+
+    deltas_e_ys_perc[model] = dict()
+    deltas_e_yt_perc[model] = dict()
+    deltas_e_yh_perc[model] = dict()
+    
+    for method in methods:
+        deltas_e_ys[model][method] = dict()
+        deltas_e_yt[model][method] = dict()
+        deltas_e_yh[model][method] = dict()
+        
+        deltas_ys[model][method] = dict()
+        deltas_yt[model][method] = dict()
+        deltas_yh[model][method] = dict()
+
+        deltas_e_ys_perc[model][method] = dict()
+        deltas_e_yt_perc[model][method] = dict()
+        deltas_e_yh_perc[model][method] = dict()
+
+        for dr in ['', 'low', 'mid', 'high']:
+            
+            if degrade:
+                deltas_e_ys[model][method][dr] = xr.open_dataarray(temp_path2+'/run'+method+'_v'+version+'/delta_e_ys_'+['dynreg_' if dr != '' else ''][0]+model+'_'+delta_period[0]+'-'+delta_period[1]+'_dg'+str(degrade_n)+['_'+dr if dr != '' else ''][0]+'.nc')
+                deltas_e_yt[model][method][dr] = xr.open_dataarray(temp_path2+'/run'+method+'_v'+version+'/delta_e_yt_'+['dynreg_' if dr != '' else ''][0]+model+'_'+delta_period[0]+'-'+delta_period[1]+'_dg'+str(degrade_n)+['_'+dr if dr != '' else ''][0]+'.nc')
+                deltas_e_yh[model][method][dr] = xr.open_dataarray(temp_path2+'/run'+method+'_v'+version+'/delta_e_yh_'+['dynreg_' if dr != '' else ''][0]+model+'_'+delta_period[0]+'-'+delta_period[1]+'_dg'+str(degrade_n)+['_'+dr if dr != '' else ''][0]+'.nc')
+                deltas_ys[model][method][dr] = xr.open_dataarray(temp_path2+'/run'+method+'_v'+version+'/delta_ys_'+['dynreg_' if dr != '' else ''][0]+model+'_'+delta_period[0]+'-'+delta_period[1]+'_dg'+str(degrade_n)+['_'+dr if dr != '' else ''][0]+'.nc')
+                deltas_yt[model][method][dr] = xr.open_dataarray(temp_path2+'/run'+method+'_v'+version+'/delta_yt_'+['dynreg_' if dr != '' else ''][0]+model+'_'+delta_period[0]+'-'+delta_period[1]+'_dg'+str(degrade_n)+['_'+dr if dr != '' else ''][0]+'.nc')
+                deltas_yh[model][method][dr] = xr.open_dataarray(temp_path2+'/run'+method+'_v'+version+'/delta_yh_'+['dynreg_' if dr != '' else ''][0]+model+'_'+delta_period[0]+'-'+delta_period[1]+'_dg'+str(degrade_n)+['_'+dr if dr != '' else ''][0]+'.nc')            
+            
+            else:
+                deltas_e_ys[model][method][dr] = xr.open_dataarray(temp_path2+'/run'+method+'_v'+version+'/delta_e_ys_'+['dynreg_' if dr != '' else ''][0]+model+'_'+delta_period[0]+'-'+delta_period[1]+['_'+dr if dr != '' else ''][0]+'.nc')
+                deltas_e_yt[model][method][dr] = xr.open_dataarray(temp_path2+'/run'+method+'_v'+version+'/delta_e_yt_'+['dynreg_' if dr != '' else ''][0]+model+'_'+delta_period[0]+'-'+delta_period[1]+['_'+dr if dr != '' else ''][0]+'.nc')
+                deltas_e_yh[model][method][dr] = xr.open_dataarray(temp_path2+'/run'+method+'_v'+version+'/delta_e_yh_'+['dynreg_' if dr != '' else ''][0]+model+'_'+delta_period[0]+'-'+delta_period[1]+['_'+dr if dr != '' else ''][0]+'.nc')
+                deltas_ys[model][method][dr] = xr.open_dataarray(temp_path2+'/run'+method+'_v'+version+'/delta_ys_'+['dynreg_' if dr != '' else ''][0]+model+'_'+delta_period[0]+'-'+delta_period[1]+['_'+dr if dr != '' else ''][0]+'.nc')
+                deltas_yt[model][method][dr] = xr.open_dataarray(temp_path2+'/run'+method+'_v'+version+'/delta_yt_'+['dynreg_' if dr != '' else ''][0]+model+'_'+delta_period[0]+'-'+delta_period[1]+['_'+dr if dr != '' else ''][0]+'.nc')
+                deltas_yh[model][method][dr] = xr.open_dataarray(temp_path2+'/run'+method+'_v'+version+'/delta_yh_'+['dynreg_' if dr != '' else ''][0]+model+'_'+delta_period[0]+'-'+delta_period[1]+['_'+dr if dr != '' else ''][0]+'.nc')            
+
+
+            deltas_e_ys_perc[model][method][dr] = xr.apply_ufunc(stats.percentileofscore, deltas_ys[model][method][dr], deltas_e_ys[model][method][dr], input_core_dims=[['boots'], []], vectorize=True, dask='parallelized', dask_gufunc_kwargs={'allow_rechunk':True})
+            deltas_e_yt_perc[model][method][dr] = xr.apply_ufunc(stats.percentileofscore, deltas_yt[model][method][dr], deltas_e_yt[model][method][dr], input_core_dims=[['boots'], []], vectorize=True, dask='parallelized', dask_gufunc_kwargs={'allow_rechunk':True})
+            deltas_e_yh_perc[model][method][dr] = xr.apply_ufunc(stats.percentileofscore, deltas_yh[model][method][dr], deltas_e_yh[model][method][dr], input_core_dims=[['boots'], []], vectorize=True, dask='parallelized', dask_gufunc_kwargs={'allow_rechunk':True})
+    
+plot_titles = ['Spatial preference: '+r'$\mathrm{\delta_e(Y^s)}$',
+               'Temporal preference: '+r'$\mathrm{\delta_e(Y^t)}$',
+               'Heterogeneity preference: '+r'$\mathrm{\delta_e(Y^h)}$']
+
+# si estoy recargando resultados anteriores tengo que volver a calcular esto
+if 'ys_e_cut_dg' not in locals() or 'ys_e_cut_dg' not in globals():
+    ys_e_cut_dg = dict()
+
+
+for model in models.keys():
+    for dr in ['']:
+        
+        deltas = [xr.zeros_like(deltas_e_ys_perc[model][method][dr]) + xr.concat([deltas_e_ys_perc[model][method][dr]>thresholds[1] for method in methods], dim='methods').sum(dim='methods') - xr.concat([deltas_e_ys_perc[model][method][dr]<thresholds[0] for method in methods], dim='methods').sum(dim='methods'),
+                  xr.zeros_like(deltas_e_yt_perc[model][method][dr]) + xr.concat([deltas_e_yt_perc[model][method][dr]>thresholds[1] for method in methods], dim='methods').sum(dim='methods') - xr.concat([deltas_e_yt_perc[model][method][dr]<thresholds[0] for method in methods], dim='methods').sum(dim='methods'),
+                  xr.zeros_like(deltas_e_yh_perc[model][method][dr]) + xr.concat([deltas_e_yh_perc[model][method][dr]>thresholds[1] for method in methods], dim='methods').sum(dim='methods') - xr.concat([deltas_e_yh_perc[model][method][dr]<thresholds[0] for method in methods], dim='methods').sum(dim='methods')]
+        
+        # mascara para los puntos con menos de min_events eventos:
+        
+        if degrade:
+            lat_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lat" in coord][0]
+            lon_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lon" in coord][0]
+            res_lat = [None if len(ys_e_cut[model][lat_name])%degrade_n==0 else len(ys_e_cut[model][lat_name])%degrade_n*-1][0]
+            res_lon = [None if len(ys_e_cut[model][lon_name])%degrade_n==0 else len(ys_e_cut[model][lon_name])%degrade_n*-1][0]
+            if model not in ys_e_cut_dg.keys():
+                ys_e_cut_dg[model] = xr.concat([ys_e_cut[model][:,i:res_lat:degrade_n,j:res_lon:degrade_n] for i,j in list(itertools.product(range(0,degrade_n), repeat=2))], dim=timename, join='override')
+            min_ev_mask = ys_e_cut_dg[model].count(axis=0).compute()
+    
+        else:
+            min_ev_mask = ys_e_cut[model].count(axis=0).compute()
+        
+        
+        # crear figura y axes
+        fig1, ax = juli_functions.make_figure(model+' '+seas_name+' '+delta_period[0]+' - '+delta_period[1], figsize=(13,5), general_fontsize=9)
+    
+        clevs = np.array([-4.5,-3.5,-2.5,-1.5,-0.5,0,0.5,1.5,2.5,3.5,4.5])       # Esta es la escala que usa Guillod
+    
+        # barra de colores
+        barra= juli_functions.barra_zerocenter(clevs ,colormap=matplotlib.cm.get_cmap('RdBu'), no_extreme_colors=False)
+        
+        barra = mcolors.ListedColormap([(235/255,235/255,235/255) if x in np.arange(int(barra.N*0.4), int(barra.N*0.6)) else barra(x) for x in np.arange(0, barra.N)])
+    
+        # Si son muchos plots
+        ax.set_visible(False)
+        gs = gridspec.GridSpec(1,3, wspace=0, hspace=0.2) #si quiero multiples subplos
+        
+        for m, delta in enumerate(deltas):
+            # Poner en loop si son muchos plot
+            ax1 = plt.subplot(gs[m], projection = proj)
+            
+            # hago cada plot
+            if degrade:
+                CS1 = juli_functions.plot_pcolormesh(ax1, delta.where(min_ev_mask>=min_events), lon[model][:res_lon:degrade_n], lat[model][:res_lat:degrade_n], lonproj[model][:res_lat:degrade_n,:res_lon:degrade_n], latproj[model][:res_lat:degrade_n,:res_lon:degrade_n], proj,
+                                                     clevs, barra, numbering[m]+' '+plot_titles[m], titlesize = 12, coastwidth = 1, countrywidth = 1)
+            else:
+                CS1 = juli_functions.plot_pcolormesh(ax1, delta.where(min_ev_mask>=min_events), lon[model], lat[model], lonproj[model], latproj[model], proj,
+                                                     clevs, barra, numbering[m]+' '+plot_titles[m], titlesize = 12, coastwidth = 1, countrywidth = 1)
+    
+        # add colorbar
+        #fig1.subplots_adjust(right=0.1, left=, top=, bottom=)
+        juli_functions.add_colorbar(fig1, CS1, 'neither', '', cbaxes= [0.9, 0.2, 0.01, 0.6], ticks=[-4,-3,-2,-1,0,1,2,3,4]) #[*left*, *bottom*, *width*,  *height*]
+        
+        if min_events==0:
+            # save 
+            juli_functions.savefig(fig1, images_path, 'delta_percentile_robust_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_'+dr if dr!='' else ''][0]+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
+        
+        else:
+            # save 
+            juli_functions.savefig(fig1, images_path, 'delta_percentile_robust_min_'+str(min_events)+'_evs_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_'+dr if dr!='' else ''][0]+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
+        
+        
+        
 #%%exit the program early
 from sys import exit
 exit()
