@@ -206,7 +206,7 @@ seas_name = 'ONDJFM' # Para los títulos
 rango_sm = (6,11) # Rango de horas para SM (en la mañana)
 rango_pre_mor = (6,11) # Rango de horas para pre (en la mañana) Tener en cuenta que es el acumulado
 rango_pre_aft = (12,23) # Rango de horas para pre (en la tarde)
-if 'RCA4' in models: rango_sm = (6,8); rango_pre_mor = (6,8); rango_pre_aft = (9,20)
+if 'RCA4' in models or 'RCA4CLIM' in models: rango_sm = (6,8); rango_pre_mor = (6,8); rango_pre_aft = (9,20)
 
 pre_mor_max = 1*pre_multipliers # Máxima prec en la mañana en mm
 pre_aft_min = 4*pre_multipliers # Mínima prec en la tarde en mm
@@ -532,11 +532,11 @@ for model in models.keys():
     else:
         if dayofyear_smanom:
             #data_mor[model]['sm1'] = xr.concat([sm_mor[i] for i in timezones], dim=lon_name).groupby(timename+'.dayofyear') - sm_daily_doy[model]
-            data_mor[model]['sm1'] = sm_daily[model].groupby(timename+'.dayofyear') - sm_daily_doy[model]
+            data_mor[model]['sm1'] = (sm_daily[model].groupby(timename+'.dayofyear') - sm_daily_doy[model]).round(7) #round is added to removes imprecise residuals in CLIM
             
         else:
             # data_mor[model]['sm1'] = xr.concat([sm_mor[i] for i in timezones], dim=lon_name) - sm_daily_rm[model]
-            data_mor[model]['sm1'] = sm_daily[model] - sm_daily_rm[model]
+            data_mor[model]['sm1'] = (sm_daily[model] - sm_daily_rm[model]).round(7) #round is added to removes imprecise residuals in CLIM
 
         data_mor[model]['sm1'].to_netcdf(temp_path+'/sm1_mor_'+model+'.nc')
         data_mor[model]['sm1'] = xr.open_dataarray(temp_path+'/sm1_mor_'+model+'.nc')
@@ -1338,7 +1338,10 @@ for model in models.keys():
         else:
             CS1 = juli_functions.plot_pcolormesh(ax1, delta.where(min_ev_mask>=min_events), lon[model], lat[model], lonproj[model], latproj[model], proj,
                                                  clevs, barra, numbering[m]+' '+plot_titles[m], titlesize = 12, coastwidth = 1, countrywidth = 1)
-
+            
+            # anotar el nro de puntos significativos:
+            # plt.text(-48,5, str(int( (delta.where(min_ev_mask>=min_events)>90).sum() + (delta.where(min_ev_mask>=min_events)<10).sum() ) ) )
+        
     # add colorbar
     #fig1.subplots_adjust(right=0.1, left=, top=, bottom=)
     juli_functions.add_colorbar(fig1, CS1, 'neither', '%', cbaxes= [0.9, 0.2, 0.01, 0.6]) #[*left*, *bottom*, *width*,  *height*]
@@ -2499,12 +2502,31 @@ for model in models.keys():
         else:
             # save 
             juli_functions.savefig(fig1, images_path, 'delta_percentile_robust_min_'+str(min_events)+'_evs_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_'+dr if dr!='' else ''][0]+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
-        
-        
+
+
         
 #%%exit the program early
 from sys import exit
 exit()
+
+#%% ####### -----------------------  Paso la SM de RCA4CLIM a la climatología como deberia ser
+
+sm_grouped = data_xr['RCA4CLIM']['sm1']['var252'].loc[{'time': data_xr['RCA4CLIM']['sm1']['var252']['time.hour']==0}].groupby('time.dayofyear').mean(dim='time').compute()
+
+sm_fixed = xr.zeros_like(data_xr['RCA4CLIM']['sm1']['var252']['time.hour']==0).groupby('time.dayofyear') + sm_grouped
+
+sm_fixed_h = sm_fixed.resample({'time':'H'}).pad()
+
+sm_fixed_h.to_netcdf(homepath+'CLIM/Data/1980-2012/sm/sm1_198001_201212_sSA_fixed2.nc')
+
+lala3=xr.open_dataarray(homepath+'CLIM/Data/1980-2012/sm/sm1_198001_201212_sSA_fixed.nc', chunks={'time':(chunksize*10)})
+
+plt.plot(np.array(lala3[:,0,50,50].loc[{'time':'1983'}][:]))
+plt.plot(np.array(lala3[:,0,50,50].loc[{'time':'1984'}][:]))
+plt.plot(np.array(lala3[:,0,50,50].loc[{'time':'1985'}][:]))
+plt.plot(np.array(lala3[:,0,50,50].loc[{'time':'1986'}][:]))    
+plt.plot(np.array(lala2[:,0,50,50][:24*4]))
+
 
 #%% Pruebas chequeando si los eventos tienen P previa
 
