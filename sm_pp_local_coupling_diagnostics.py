@@ -28,6 +28,7 @@ Created on Thu Apr 12 10:54:12 2018
 #             Improvements to speed with wrapping of xr.apply_ufunc and new event detection method
 # Version 14: Missing feature added: now non-events with morning P>pre_mor_max in adjacent tiles are also filtered out. 
 # Version 15: minor bug fixed: SM anomalies calculated only from morning values (instead of daily averages). Forced SM from UNC to be fixed to the mean annual wave.
+# Version 16: bug fixed: improved way to select timezone bands (some hours from the day after the event were being left out)
 
 
 
@@ -117,8 +118,8 @@ seas_warm = [1,2,3,10,11,12] # En que meses quiero la estacion a considerar (inc
 seas_cold = [4,5,6,7,8,9]
 homepath = '/home/julian.giles/datos/'
 data_path = '/datosfreyja/d1/GDATA/'
-temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run5_v15'
-images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run5_v15/'
+temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run5_v16'
+images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run5_v16/'
 font_size = 20 # font size for all elements
 proj = ccrs.PlateCarree(central_longitude=0.0)  # Proyeccion cyl eq
 
@@ -259,8 +260,7 @@ data['GLEAM+CMORPH+ERA5']['evapot'][''].coords['lat'] = data['GLEAM+CMORPH+ERA5'
 
 models = {'GLEAM+CMORPH+ERA5': "GLEAM+CMORPH+ERA5 "+start_date[0:4]+"-"+end_date[0:4]}
 
-#%% ----- 
-# --------- FILTRO LOS PUNTOS CON OROGRAFIA EMPINADA --------
+#%% --------- FILTRO LOS PUNTOS CON OROGRAFIA EMPINADA --------
 print('#########  Filtrando puntos de orografía empinada y enmascarando oceanos ##############')
 mask = dict()
 
@@ -456,21 +456,27 @@ for model in models.keys():
     init_time = timeit.time.time()           
 
     for nn,zone in enumerate(timezones):
-        
-        if rango_sm[0]-zone<0:
-            print('Currently not supported hour range from less than '+str(zone))
-            break
-        
+                
         print(str(nn+1)+'/'+str(len(timezones)))
+
+        # muevo el tiempo de vimfc2d a LST , hago las cuentas y los vuelvo a sus tiempos originales
+        data[model]['pre'][''].coords[timename] = data[model]['pre'][''][timename] - zone*3600000000000
+        data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] - zone*3600000000000
         
-        pre_mor[zone] = data[model]['pre'][''].loc[{timename:pre_morning(data[model]['pre'][''][timename+'.hour']-zone), lon_name:slice(zonelimits[nn],zonelimits[nn+1])}].resample({timename:'D'}).sum().compute()
         
-        pre_aft[zone] = data[model]['pre'][''].loc[{timename:pre_afternoon(data[model]['pre'][''][timename+'.hour']-zone), lon_name:slice(zonelimits[nn],zonelimits[nn+1])}].resample({timename:'D'}).sum().compute()
+        pre_mor[zone] = data[model]['pre'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:pre_morning(data[model]['pre'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour']), lon_name:slice(zonelimits[nn],zonelimits[nn+1])}].resample({timename:'D'}).sum().compute()
+        
+        pre_aft[zone] = data[model]['pre'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:pre_afternoon(data[model]['pre'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour']), lon_name:slice(zonelimits[nn],zonelimits[nn+1])}].resample({timename:'D'}).sum().compute()
         
         if 'GLEAM' not in model:            
-            sm_mor[zone] = data[model]['sm1'][''].loc[{timename:sm_morning(data[model]['sm1'][''][timename+'.hour']-zone), lon_name:slice(zonelimits[nn],zonelimits[nn+1])}].resample({timename:'D'}).mean().compute()
+            sm_mor[zone] = data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:sm_morning(data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour']), lon_name:slice(zonelimits[nn],zonelimits[nn+1])}].resample({timename:'D'}).mean().compute()
 
-        # muevo el tiempo de vimfc2d a LST 
+
+        data[model]['pre'][''].coords[timename] = data[model]['pre'][''][timename] + zone*3600000000000
+        data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] + zone*3600000000000
+
+
+        # muevo el tiempo de vimfc2d a LST , hago la cuenta y lo vuelvo a su tiempo original
         data[model]['vimfc2d'][''].coords[timename] = data[model]['vimfc2d'][''][timename] - zone*3600000000000
 
         vimfc2d_day[zone] = data[model]['vimfc2d'][''].loc[{timename: slice(start_date,end_date), lon_name:slice(zonelimits[nn],zonelimits[nn+1])}].resample({timename:'D'}).mean().compute()*mult_hd['vimfc2d'][model][0]
@@ -2504,7 +2510,142 @@ for model in models.keys():
             juli_functions.savefig(fig1, images_path, 'delta_percentile_robust_min_'+str(min_events)+'_evs_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_'+dr if dr!='' else ''][0]+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
 
 
+#%% ####### -----------------------  Cambio de heterogeneidad debido al evento
+
+data_sm_mor = dict()
+data_sm_aft = dict()
+
+sm_mor_std=dict()
+sm_aft_std=dict()
+
+sm_std_change=dict()
+sm_std_change0=dict()
+
+for model in models.keys():
+
+    print('..... '+model+' ....')
+    
+    
+    timename='time'
+    if model=='JRA-55': timename='initial_time0_hours'
+
+    lon_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lon" in coord][0]
+    lat_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lat" in coord][0]
+    
+    # LIMITES DE LAS TIMEZONES #########################################
+    timezones = [5,4,3,2] # A MEJORAR: SE PODRIA AGREGAR EL NEGATIVO DENTRO DE ESTA VARIABLE (son franjas -3, -4, etc)
+    zonelimits = np.array([float(lon[model][0]), -67.5-0.24, -52.5-0.24, -37.5-0.24, float(lon[model][-1])]) 
+            
+    #diccionario temporal para guardar calculos por franjas horarias
+    sm_aft = dict()
+    sm_mor = dict()
+    
+    # creo datos diarios promediando las horas de interés para cada caso
+    print('calculando por franjas horarias')
+    init_time = timeit.time.time()           
+
+    for nn,zone in enumerate(timezones):
         
+        if rango_sm[0]-zone<0:
+            print('Currently not supported hour range from less than '+str(zone))
+            break
+        
+        print(str(nn+1)+'/'+str(len(timezones)))
+        
+        # Muevo el tiempo, calculo y lo vuelvo al estado original
+        data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] - zone*3600000000000
+        
+        sm_mor[zone] = data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:(data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour'])==rango_sm[1], lon_name:slice(zonelimits[nn],zonelimits[nn+1])}]
+
+        sm_aft[zone] = data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:(data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour'])==rango_pre_aft[1], lon_name:slice(zonelimits[nn],zonelimits[nn+1])}]
+
+        data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] + zone*3600000000000
+        
+    print(str(round((timeit.time.time()-init_time)/60,2))+' min')
+    
+    print('concateno, calculo std, selecciono dias evento')
+    init_time = timeit.time.time()              
+    
+    # concateno    
+    data_sm_mor[model] = xr.concat([sm_mor[i] for i in timezones], dim=lon_name)
+
+    data_sm_aft[model] = xr.concat([sm_aft[i] for i in timezones], dim=lon_name)
+
+    # calculo std de los alrededores
+    sm_mor_std[model] = xr.concat([data_sm_mor[model].shift({lat_name:ii, lon_name:jj}) for ii,jj in list(itertools.product(range(-box_size2[0],box_size2[0]+1), repeat=2))], dim='shifted').std(dim='shifted').compute()
+    
+    sm_aft_std[model] = xr.concat([data_sm_aft[model].shift({lat_name:ii, lon_name:jj}) for ii,jj in list(itertools.product(range(-box_size2[0],box_size2[0]+1), repeat=2))], dim='shifted').std(dim='shifted').compute()
+    
+    # calculo la diferencia y selecciono los dias con evento
+    hour_dif = int(sm_aft_std[model][0][timename+'.hour'] - sm_mor_std[model][0][timename+'.hour'])
+    sm_mor_std[model].coords[timename] = sm_mor_std[model][timename] + hour_dif*3600000000000
+    
+    sm_std_change0[model] = (sm_aft_std[model] - sm_mor_std[model])
+    sm_std_change0[model].coords[timename] = sm_std_change0[model][timename] - int(sm_std_change0[model][timename+'.hour'][0])*3600000000000
+    
+    sm_std_change[model] = sm_std_change0[model].where(~np.isnan(ys_e[model])).compute()
+
+    print(str(round((timeit.time.time()-init_time)/60,2))+' min')
+
+
+#------------- PLOTS
+for model in models.keys():
+
+    print('####### Plotting ########')
+    print('..... '+model+' ....')
+    
+    
+    timename='time'
+    if model=='JRA-55': timename='initial_time0_hours'
+
+    lon_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lon" in coord][0]
+    lat_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lat" in coord][0]
+
+    def season_sel(month):
+        return np.asarray([m in seas for m in month])
+    
+    daily_time_months = np.asarray(sm_std_change[model][timename+'.month'])
+
+
+    if degrade:
+        res_lat = [None if len(ys_e_cut[model][lat_name])%degrade_n==0 else len(ys_e_cut[model][lat_name])%degrade_n*-1][0]
+        res_lon = [None if len(ys_e_cut[model][lon_name])%degrade_n==0 else len(ys_e_cut[model][lon_name])%degrade_n*-1][0]
+        
+        sm_std_change_final = xr.concat([sm_std_change[model].loc[{timename:slice(delta_period[0], delta_period[1])}][season_sel(daily_time_months)][:,i:res_lat:degrade_n,j:res_lon:degrade_n] for i,j in list(itertools.product(range(0,degrade_n), repeat=2))], dim=timename, join='override')
+        min_ev_mask = sm_std_change_final.count(axis=0).compute()
+
+    else:
+        sm_std_change_final = sm_std_change[model].loc[{timename:slice(delta_period[0], delta_period[1])}][season_sel(daily_time_months)]
+        min_ev_mask = sm_std_change_final.count(axis=0).compute()
+
+
+    # crear figura y axes
+    fig1, ax = juli_functions.make_figure('Mean change in SM heterogeneity due to event \n'+model+' '+seas_name+' '+delta_period[0]+' - '+delta_period[1], figsize=(5,5), general_fontsize=9)
+        
+    # barra de colores
+    clevs = np.arange(-0.0001, 0.000125, 0.000025)       # Esta es la escala que usa Guillod
+
+    barra= juli_functions.barra_zerocenter(clevs ,colormap=matplotlib.cm.get_cmap('RdBu'), no_extreme_colors=True)
+    barra.set_over('#053061')
+    barra.set_under('#67001f')
+    
+    
+    if degrade:
+        CS1 = juli_functions.plot_pcolormesh(ax, sm_std_change_final.mean(dim=timename).where(min_ev_mask>min_events), lon[model][:res_lon:degrade_n], lat[model][:res_lat:degrade_n], lonproj[model][:res_lat:degrade_n,:res_lon:degrade_n], latproj[model][:res_lat:degrade_n,:res_lon:degrade_n], proj,
+                                             clevs, barra, '', titlesize = 12, coastwidth = 1, countrywidth = 1)
+    else:
+        CS1 = juli_functions.plot_pcolormesh(ax, sm_std_change_final.mean(dim=timename).where(min_ev_mask>min_events), lon[model], lat[model], lonproj[model], latproj[model], proj,
+                                             clevs, barra, '', titlesize = 12, coastwidth = 1, countrywidth = 1)
+    
+    # add colorbar
+    #fig1.subplots_adjust(right=0.1, left=, top=, bottom=)
+    juli_functions.add_colorbar(fig1, CS1, 'both', units_labels['sm1'], cbaxes= [0.9, 0.2, 0.02, 0.6]) #[*left*, *bottom*, *width*,  *height*]
+    
+    # save 
+    juli_functions.savefig(fig1, images_path, 'mean_heterog_change_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
+
+
+
 #%%exit the program early
 from sys import exit
 exit()
