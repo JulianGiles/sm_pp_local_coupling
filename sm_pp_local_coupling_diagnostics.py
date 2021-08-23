@@ -98,13 +98,13 @@ start_date = '1983-01-01'
 end_date = '2012-12-31'
 
 models = {
-          'RCA4': "RCA4 "+start_date[0:4]+"-"+end_date[0:4],
-          'RCA4CLIM': "RCA4CLIM "+start_date[0:4]+"-"+end_date[0:4],
+#          'RCA4': "RCA4 "+start_date[0:4]+"-"+end_date[0:4],
+#          'RCA4CLIM': "RCA4CLIM "+start_date[0:4]+"-"+end_date[0:4],
 #          'LMDZ': "LMDZ "+start_date[0:4]+"-"+end_date[0:4],
 #          'TRMM-3B42': "TRMM-3B42 V7 1998-2012",
 #          'CMORPH': "CMORPH V1.0 1998-2012",
 #          'JRA-55': "JRA-55 "+start_date[0:4]+"-"+end_date[0:4],
-#          'ERA5': "ERA5 "+start_date[0:4]+"-"+end_date[0:4],
+          'ERA5': "ERA5 "+start_date[0:4]+"-"+end_date[0:4],
 #          'GLEAM': "GLEAM "+start_date[0:4]+"-"+end_date[0:4],
 #          'ESACCI': "ESA-CCI "+start_date[0:4]+"-"+end_date[0:4],
           }
@@ -118,8 +118,8 @@ seas_warm = [1,2,3,10,11,12] # En que meses quiero la estacion a considerar (inc
 seas_cold = [4,5,6,7,8,9]
 homepath = '/home/julian.giles/datos/'
 data_path = '/datosfreyja/d1/GDATA/'
-temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run5_v16'
-images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run5_v16/'
+temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run7.3_v16'
+images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run7.3_v16/'
 font_size = 20 # font size for all elements
 proj = ccrs.PlateCarree(central_longitude=0.0)  # Proyeccion cyl eq
 
@@ -212,20 +212,20 @@ if 'RCA4' in models or 'RCA4CLIM' in models: rango_sm = (6,8); rango_pre_mor = (
 pre_mor_max = 1*pre_multipliers # Máxima prec en la mañana en mm
 pre_aft_min = 4*pre_multipliers # Mínima prec en la tarde en mm
 
-delta_orog_lim = 360  # Máximo cambio en orografía admitido dentro de la caja 3x3 en metros (para 0.25 seria 180, para 0.5 seria 360)
+delta_orog_lim = 180  # Máximo cambio en orografía admitido dentro de la caja 3x3 en metros (para 0.25 seria 180, para 0.5 seria 360)
 box_size = (3,3) # Dimensiones (horizontal,vertical) de la caja de los eventos (en puntos de grilla) 
 box_size2 = (int((box_size[0]-1)/2), int((box_size[1]-1)/2)) # para uso en el calculo
 bootslength = 1000 # Cantidad de valores del bootstrapping
 min_events = 25 # minimo de eventos que tiene que haber para plotear el resultado (solo aplica a los graficos)
 
 degrade = True # degradar la reticula para agrupar eventos?
-degrade_n = 3 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
+degrade_n = 6 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
 if degrade_n >0: degrade =True
 
-n_rollmean = 31 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
+n_rollmean = 21 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
 sm_roll_mean_center = True # si tomar la anomalia de SM respecto a la rolling mean centrada (True) o para atras (False), para quitar los bias estacionales
 
-seas_expect_smanom = False # la anomalia de SM es respecto a la seasonal expectation (Petrova, tomado de Taylor): roll mean centrada de 21 dias y promediada en los años menos en el año del evento
+seas_expect_smanom = True # la anomalia de SM es respecto a la seasonal expectation (Petrova, tomado de Taylor): roll mean centrada de 21 dias y promediada en los años menos en el año del evento
 if seas_expect_smanom: sm_roll_mean_center = True
 
 dayofyear_smanom = False # si hacer la anomalia de SM respecto a la climatología para ese dia del año. Si False, entonces hacer la rolling mean
@@ -2545,11 +2545,7 @@ for model in models.keys():
     init_time = timeit.time.time()           
 
     for nn,zone in enumerate(timezones):
-        
-        if rango_sm[0]-zone<0:
-            print('Currently not supported hour range from less than '+str(zone))
-            break
-        
+                
         print(str(nn+1)+'/'+str(len(timezones)))
         
         # Muevo el tiempo, calculo y lo vuelvo al estado original
@@ -2572,9 +2568,13 @@ for model in models.keys():
     data_sm_aft[model] = xr.concat([sm_aft[i] for i in timezones], dim=lon_name)
 
     # calculo std de los alrededores
-    sm_mor_std[model] = xr.concat([data_sm_mor[model].shift({lat_name:ii, lon_name:jj}) for ii,jj in list(itertools.product(range(-box_size2[0],box_size2[0]+1), repeat=2))], dim='shifted').std(dim='shifted').compute()
+    sm_mor_std[model] = xr.concat([data_sm_mor[model].shift({lat_name:ii, lon_name:jj}) for ii,jj in list(itertools.product(range(-box_size2[0],box_size2[0]+1), repeat=2))], dim='shifted').std(dim='shifted')#.compute()
+    sm_mor_std[model].to_netcdf(temp_path+'/sm_mor_std_'+model+'_'+start_date+'-'+end_date+'.nc')
+    sm_mor_std[model] = xr.open_dataarray(temp_path+'/sm_mor_std_'+model+'_'+start_date+'-'+end_date+'.nc', chunks={timename:chunksize})
     
-    sm_aft_std[model] = xr.concat([data_sm_aft[model].shift({lat_name:ii, lon_name:jj}) for ii,jj in list(itertools.product(range(-box_size2[0],box_size2[0]+1), repeat=2))], dim='shifted').std(dim='shifted').compute()
+    sm_aft_std[model] = xr.concat([data_sm_aft[model].shift({lat_name:ii, lon_name:jj}) for ii,jj in list(itertools.product(range(-box_size2[0],box_size2[0]+1), repeat=2))], dim='shifted').std(dim='shifted')#.compute()
+    sm_aft_std[model].to_netcdf(temp_path+'/sm_aft_std_'+model+'_'+start_date+'-'+end_date+'.nc')
+    sm_aft_std[model] = xr.open_dataarray(temp_path+'/sm_aft_std_'+model+'_'+start_date+'-'+end_date+'.nc', chunks={timename:chunksize})
     
     # calculo la diferencia y selecciono los dias con evento
     hour_dif = int(sm_aft_std[model][0][timename+'.hour'] - sm_mor_std[model][0][timename+'.hour'])
@@ -2608,8 +2608,8 @@ for model in models.keys():
 
 
     if degrade:
-        res_lat = [None if len(ys_e_cut[model][lat_name])%degrade_n==0 else len(ys_e_cut[model][lat_name])%degrade_n*-1][0]
-        res_lon = [None if len(ys_e_cut[model][lon_name])%degrade_n==0 else len(ys_e_cut[model][lon_name])%degrade_n*-1][0]
+        res_lat = [None if len(ys_e[model][lat_name])%degrade_n==0 else len(ys_e[model][lat_name])%degrade_n*-1][0]
+        res_lon = [None if len(ys_e[model][lon_name])%degrade_n==0 else len(ys_e[model][lon_name])%degrade_n*-1][0]
         
         sm_std_change_final = xr.concat([sm_std_change[model].loc[{timename:slice(delta_period[0], delta_period[1])}][season_sel(daily_time_months)][:,i:res_lat:degrade_n,j:res_lon:degrade_n] for i,j in list(itertools.product(range(0,degrade_n), repeat=2))], dim=timename, join='override')
         min_ev_mask = sm_std_change_final.count(axis=0).compute()
@@ -2623,7 +2623,8 @@ for model in models.keys():
     fig1, ax = juli_functions.make_figure('Mean change in SM heterogeneity due to event \n'+model+' '+seas_name+' '+delta_period[0]+' - '+delta_period[1], figsize=(5,5), general_fontsize=9)
         
     # barra de colores
-    clevs = np.arange(-0.0001, 0.000125, 0.000025)       # Esta es la escala que usa Guillod
+    if 'RCA4' in model: clevs = np.arange(-0.0001, 0.000125, 0.000025) 
+    if 'ERA5' in model: clevs = np.arange(-0.001, 0.00125, 0.00025) 
 
     barra= juli_functions.barra_zerocenter(clevs ,colormap=matplotlib.cm.get_cmap('RdBu'), no_extreme_colors=True)
     barra.set_over('#053061')
