@@ -118,8 +118,8 @@ seas_warm = [1,2,3,10,11,12] # En que meses quiero la estacion a considerar (inc
 seas_cold = [4,5,6,7,8,9]
 homepath = '/home/julian.giles/datos/'
 data_path = '/datosfreyja/d1/GDATA/'
-temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run7.3_v16'
-images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run7.3_v16/'
+temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run9_v16'
+images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run9_v16/'
 font_size = 20 # font size for all elements
 proj = ccrs.PlateCarree(central_longitude=0.0)  # Proyeccion cyl eq
 
@@ -212,7 +212,7 @@ if 'RCA4' in models or 'RCA4CLIM' in models: rango_sm = (6,8); rango_pre_mor = (
 pre_mor_max = 1*pre_multipliers # Máxima prec en la mañana en mm
 pre_aft_min = 4*pre_multipliers # Mínima prec en la tarde en mm
 
-delta_orog_lim = 180  # Máximo cambio en orografía admitido dentro de la caja 3x3 en metros (para 0.25 seria 180, para 0.5 seria 360)
+delta_orog_lim = 360  # Máximo cambio en orografía admitido dentro de la caja 3x3 en metros (para 0.25 seria 180, para 0.5 seria 360)
 box_size = (3,3) # Dimensiones (horizontal,vertical) de la caja de los eventos (en puntos de grilla) 
 box_size2 = (int((box_size[0]-1)/2), int((box_size[1]-1)/2)) # para uso en el calculo
 bootslength = 1000 # Cantidad de valores del bootstrapping
@@ -222,10 +222,10 @@ degrade = True # degradar la reticula para agrupar eventos?
 degrade_n = 6 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
 if degrade_n >0: degrade =True
 
-n_rollmean = 21 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
+n_rollmean = 31 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
 sm_roll_mean_center = True # si tomar la anomalia de SM respecto a la rolling mean centrada (True) o para atras (False), para quitar los bias estacionales
 
-seas_expect_smanom = True # la anomalia de SM es respecto a la seasonal expectation (Petrova, tomado de Taylor): roll mean centrada de 21 dias y promediada en los años menos en el año del evento
+seas_expect_smanom = False # la anomalia de SM es respecto a la seasonal expectation (Petrova, tomado de Taylor): roll mean centrada de 21 dias y promediada en los años menos en el año del evento
 if seas_expect_smanom: sm_roll_mean_center = True
 
 dayofyear_smanom = False # si hacer la anomalia de SM respecto a la climatología para ese dia del año. Si False, entonces hacer la rolling mean
@@ -1868,7 +1868,7 @@ for model in models.keys():
     
     # add colorbar
     #fig1.subplots_adjust(right=0.1, left=, top=, bottom=)
-    juli_functions.add_colorbar(fig1, CS1, 'max', '', cbaxes= [0.9, 0.2, 0.02, 0.6]) #[*left*, *bottom*, *width*,  *height*]
+    juli_functions.add_colorbar(fig1, CS1, ['neither' if how=='%' and clevs[-1]==100 else 'max'][0], '', cbaxes= [0.9, 0.2, 0.02, 0.6]) #[*left*, *bottom*, *width*,  *height*]
     
     # save 
     juli_functions.savefig(fig1, images_path, 'n_events_w_previousP_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
@@ -1916,7 +1916,7 @@ for model in models.keys():
                                                  clevs, barra, numbering[m]+' '+dr+' dynamic regime', titlesize = 12, coastwidth = 1, countrywidth = 1)
     # add colorbar
     #fig1.subplots_adjust(right=0.1, left=, top=, bottom=)
-    juli_functions.add_colorbar(fig1, CS1, 'max', '', cbaxes= [0.9, 0.2, 0.01, 0.6]) #[*left*, *bottom*, *width*,  *height*]
+    juli_functions.add_colorbar(fig1, CS1, ['neither' if how=='%' and clevs[-1]==100 else 'max'][0], '', cbaxes= [0.9, 0.2, 0.01, 0.6]) #[*left*, *bottom*, *width*,  *height*]
     
     # save 
     juli_functions.savefig(fig1, images_path, 'n_events_w_previousP_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+'_regimes'+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
@@ -2249,10 +2249,19 @@ for model in models.keys():
 if 'SALLJ' in regions.keys(): regions.pop('SALLJ')
 if 'JEXIT' in regions.keys(): regions.pop('JEXIT')
 
+dr_to_plot = ['all'] # si quiero los regimenes dinamicos ['all', 'low', 'mid', 'high'], primero tengo que correr cond_dr[model][dr]
+
 
 #creo data_day de pre y sm    
 for model in models.keys():
     for var in ['pre', 'sm1']:
+
+        timename='time'
+        if model=='JRA-55': timename='initial_time0_hours'
+    
+        lat_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lat" in coord][0]
+        lon_name = [coord for coord in set(data[model][var_list[0]][''].coords.keys()) if "lon" in coord][0]
+
         # primero muevo el tiempo de pre a LST  (aprox, tomo UTC-4 para todo)
         data[model][var][''].coords[timename] = data[model][var][''][timename] - 4*3600000000000
         
@@ -2261,7 +2270,7 @@ for model in models.keys():
         
         data[model][var][''].coords[timename] = data[model][var][''][timename] + 4*3600000000000
     
-        data_day_cut[model][var] = data_day[model][var][''][season_sel(daily_time_months)].loc[{timename:slice(delta_period[0], delta_period[1])}]
+        #data_day_cut[model][var] = data_day[model][var][''][season_sel(daily_time_months)].loc[{timename:slice(delta_period[0], delta_period[1])}]
     
 
 
@@ -2272,7 +2281,7 @@ for model in models.keys():
     pre_trend[model] = dict()
     sm_trend[model] = dict()
     
-    for dr in ['all', 'low', 'mid', 'high']:
+    for dr in dr_to_plot:
         pre_trend[model][dr] = dict()
         sm_trend[model][dr] = dict()
 
@@ -2284,8 +2293,8 @@ for model in models.keys():
                 for shift in np.arange(-15, 16):
                     shiftedcond = ~np.isnan(ys_e_cut[model]).compute()
                     shiftedcond.coords[timename] = shiftedcond[timename] + shift*24*3600000000000
-                    pre_trend[model]['all'][reg].append( float(data_day[model]['pre'][''].where(shiftedcond).loc[{lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].mean(dim=(timename, lat_name, lon_name))) )
-                    sm_trend[model]['all'][reg].append( float(data_day[model]['sm1'][''].where(shiftedcond).loc[{lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].mean(dim=(timename, lat_name, lon_name))) )
+                    pre_trend[model]['all'][reg].append( float(data_day[model]['pre'][''].where(shiftedcond).loc[{timename:slice(delta_period[0], delta_period[1]), lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].mean(dim=(timename, lat_name, lon_name))) )
+                    sm_trend[model]['all'][reg].append( float(data_day[model]['sm1'][''].where(shiftedcond).loc[{timename:slice(delta_period[0], delta_period[1]), lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].mean(dim=(timename, lat_name, lon_name))) )
                 
             else:
                 pre_trend[model][dr][reg] = list()
@@ -2294,35 +2303,63 @@ for model in models.keys():
                 for shift in np.arange(-15, 16):
                     shiftedcond = ~np.isnan(ys_e_cut[model].where(cond_dr[model][dr])).compute()
                     shiftedcond.coords[timename] = shiftedcond[timename] + shift*24*3600000000000
-                    pre_trend[model][dr][reg].append( float(data_day[model]['pre'][''].where(shiftedcond).loc[{lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].mean(dim=(timename, lat_name, lon_name))) )
-                    sm_trend[model][dr][reg].append( float(data_day[model]['sm1'][''].where(shiftedcond).loc[{lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].mean(dim=(timename, lat_name, lon_name))) )
+                    pre_trend[model][dr][reg].append( float(data_day[model]['pre'][''].where(shiftedcond).loc[{timename:slice(delta_period[0], delta_period[1]), lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].mean(dim=(timename, lat_name, lon_name))) )
+                    sm_trend[model][dr][reg].append( float(data_day[model]['sm1'][''].where(shiftedcond).loc[{timename:slice(delta_period[0], delta_period[1]), lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].mean(dim=(timename, lat_name, lon_name))) )
 
+
+
+rows= [len(dr_to_plot) if len(dr_to_plot)>1 else len(regions.keys())][0] #si tomo los regimenes se hace hoizontal, sino vertical
+cols= [len(regions.keys()) if len(dr_to_plot)>1 else 1][0]
+
+figsize= [(2,5) if cols==1 else (5,5)][0]
 
 for model in models.keys():
-    # crear figura y axes
-    fig1, ax = juli_functions.make_figure('Daily mean P and SM around events \n'+model+' '+seas_name+' '+delta_period[0]+' - '+delta_period[1], figsize=(5,5), general_fontsize=6)
+    with plt.rc_context({'axes.edgecolor':'#212121', 'xtick.color':'#212121', 'ytick.color':'#212121'}):
+        
+        # crear figura y axes
+        fig1, ax = juli_functions.make_figure('Daily mean P and SM around events \n'+model+' '+seas_name+' '+delta_period[0]+' - '+delta_period[1], figsize=figsize, general_fontsize=6)
+        
     
-
-    # Si son muchos plots
-    ax.set_visible(False)
-    gs = gridspec.GridSpec(4,3, wspace=0.3, hspace=0.3) #si quiero multiples subplos
+        # Si son muchos plots
+        ax.set_visible(False)
+        gs = gridspec.GridSpec(rows,cols, wspace=0.3, hspace=0.2) #si quiero multiples subplos
+        
+        n=0
+        
+        ylims=[ [0,16], [0,14], [0,10] ]
+        yticks=[ np.arange(0,16,5), np.arange(0,14,2.5), np.arange(0,12,2) ]
+        
+        for m, dr in enumerate(dr_to_plot):
+            for l, reg in enumerate(regions.keys()): 
+                # Poner en loop si son muchos plot
+                ax1 = plt.subplot(gs[n])
+                
+                barax = plt.bar(np.arange(-15,16), pre_trend[model][dr][reg], color='steelblue')
+                plt.bar(0, pre_trend[model][dr][reg][15], color='Orange')
+                plt.ylim(ylims[l])
+                plt.yticks(yticks[l])
+                
+                if cols==1 and l<rows-1 or cols>1 and m==len(dr_to_plot)-1: ax1.axes.xaxis.set_ticklabels([]) #plt.xticks([])
+                
+                lineax = ax1.twinx()
+                # juli_functions.plot_line(lineax, np.arange(-15,16), sm_trend[model][dr][reg], None, None, None, None, None, title=[reg if n<3 and cols>1 else ''][0], xticksrot = 0, color='red')
+                
+                # juli_functions.plot_line(lineax, np.arange(-15,16), [np.array(sm_trend[model][dr][reg]).mean()]*31, None, None, None, None, None, title=[reg if n<3 else ''][0], xticksrot = 0, color='red', ls='dotted')
+                # juli_functions.plot_line(lineax, np.arange(-15,16), [np.array(sm_trend[model][dr][reg][0:15]).mean()]*15+[np.nan]*16, None, None, None, None, None, title=[reg if n<3 else ''][0], xticksrot = 0, color='red', ls='dotted')
+                
+                lineax.plot(np.arange(-15,16), sm_trend[model][dr][reg], color='red')
+                
+                lineax.plot(np.arange(-15,16), [np.array(sm_trend[model][dr][reg]).mean()]*31, color='red', ls='dotted')
+                lineax.plot(np.arange(-15,16), [np.array(sm_trend[model][dr][reg][0:15]).mean()]*15+[np.nan]*16, color='red', ls='dotted')
+                
+                #set subtitles
+                lineax.set_title([reg if n<3 and cols>1 else ''][0])
+                
     
-    n=0
-    for m, dr in enumerate(['all', 'low', 'mid', 'high']):
-        for reg in regions.keys(): 
-            # Poner en loop si son muchos plot
-            ax1 = plt.subplot(gs[n])
-            
-            barax = plt.bar(np.arange(-15,16), pre_trend[model][dr][reg], color='steelblue')
-            plt.bar(0, pre_trend[model][dr][reg][15], color='Orange')
-            lineax = ax1.twinx()
-            juli_functions.plot_line(lineax, np.arange(-15,16), sm_trend[model][dr][reg], None, None, None, None, None, title=[reg if n<3 else ''][0], xticksrot = 0, color='red')
-            
-            
-            n=n+1
-
-    # save 
-    juli_functions.savefig(fig1, images_path, 'mean_p_sm_trends_events_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
+                n=n+1
+    
+        # save 
+        juli_functions.savefig(fig1, images_path, 'mean_p_sm_trends_events_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+'.png')
 
 
 
@@ -2373,11 +2410,11 @@ for model in models.keys():
 # Se calcula para degrade=True o degrade=False usando las mismas variables, no diferencia en el calculo. Es decir, no se pueden hacer ambos a la vez.
 
 # load deltas from different methods
-version='15' # version del calculo
+version='16' # version del calculo
 temp_path2 = '/home/julian.giles/datos/temp/heterog_sm_pp/'
-methods = ['9', '7.1', '7.2', '7.3'] #metodos a considerar
+methods = ['5', '7.1', '7.2', '7.3'] #metodos a considerar
 
-thresholds = [10,90]
+thresholds = [1,99]
 
 deltas_e_ys = dict()
 deltas_e_yt = dict()
@@ -2503,11 +2540,11 @@ for model in models.keys():
         
         if min_events==0:
             # save 
-            juli_functions.savefig(fig1, images_path, 'delta_percentile_robust_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_'+dr if dr!='' else ''][0]+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
+            juli_functions.savefig(fig1, images_path, 'delta_percentile_robust_'+str(thresholds[0])+'-'+str(thresholds[1])+'_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_'+dr if dr!='' else ''][0]+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
         
         else:
             # save 
-            juli_functions.savefig(fig1, images_path, 'delta_percentile_robust_min_'+str(min_events)+'_evs_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_'+dr if dr!='' else ''][0]+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
+            juli_functions.savefig(fig1, images_path, 'delta_percentile_robust_'+str(thresholds[0])+'-'+str(thresholds[1])+'_min_'+str(min_events)+'_evs_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_'+dr if dr!='' else ''][0]+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
 
 
 #%% ####### -----------------------  Cambio de heterogeneidad debido al evento
@@ -2521,7 +2558,7 @@ sm_aft_std=dict()
 sm_std_change=dict()
 sm_std_change0=dict()
 
-for model in models.keys():
+for model in ['RCA4']:
 
     print('..... '+model+' ....')
     
@@ -2604,7 +2641,7 @@ for model in models.keys():
     def season_sel(month):
         return np.asarray([m in seas for m in month])
     
-    daily_time_months = np.asarray(sm_std_change[model][timename+'.month'])
+    daily_time_months = np.asarray(sm_std_change[model].loc[{timename:slice(delta_period[0], delta_period[1])}][timename+'.month'])
 
 
     if degrade:
