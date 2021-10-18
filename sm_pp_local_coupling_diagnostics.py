@@ -98,14 +98,15 @@ start_date = '1983-01-01'
 end_date = '2012-12-31'
 
 models = {
-#          'RCA4': "RCA4 "+start_date[0:4]+"-"+end_date[0:4],
+          'RCA4': "RCA4 "+start_date[0:4]+"-"+end_date[0:4],
 #          'RCA4CLIM': "RCA4CLIM "+start_date[0:4]+"-"+end_date[0:4],
 #          'LMDZ': "LMDZ "+start_date[0:4]+"-"+end_date[0:4],
 #          'TRMM-3B42': "TRMM-3B42 V7 1998-2012",
 #          'CMORPH': "CMORPH V1.0 1998-2012",
 #          'JRA-55': "JRA-55 "+start_date[0:4]+"-"+end_date[0:4],
-          'ERA5': "ERA5 "+start_date[0:4]+"-"+end_date[0:4],
+#          'ERA5': "ERA5 "+start_date[0:4]+"-"+end_date[0:4],
 #          'GLEAM': "GLEAM "+start_date[0:4]+"-"+end_date[0:4],
+#          'GLDASNOAH': "GLDASNOAH "+start_date[0:4]+"-"+end_date[0:4],
 #          'ESACCI': "ESA-CCI "+start_date[0:4]+"-"+end_date[0:4],
           }
 latlims=(-57,13.5) # custom lat limits for loading the data (default is -50.3, 13.5)
@@ -118,8 +119,8 @@ seas_warm = [1,2,3,10,11,12] # En que meses quiero la estacion a considerar (inc
 seas_cold = [4,5,6,7,8,9]
 homepath = '/home/julian.giles/datos/'
 data_path = '/datosfreyja/d1/GDATA/'
-temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run9_v16'
-images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run9_v16/'
+temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run5_v16'
+images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run5_v16/'
 font_size = 20 # font size for all elements
 proj = ccrs.PlateCarree(central_longitude=0.0)  # Proyeccion cyl eq
 
@@ -219,7 +220,7 @@ bootslength = 1000 # Cantidad de valores del bootstrapping
 min_events = 25 # minimo de eventos que tiene que haber para plotear el resultado (solo aplica a los graficos)
 
 degrade = True # degradar la reticula para agrupar eventos?
-degrade_n = 6 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
+degrade_n = 3 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
 if degrade_n >0: degrade =True
 
 n_rollmean = 31 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
@@ -233,32 +234,59 @@ previous_day_sm = False # calcula usando la SM promedio del dia previo en lugar 
 
 
 #%% --------- CONSTRUYO EL DATASET MEZCLA DE GLEAM+CMORPH+ERA5 ----------
-
-data['GLEAM+CMORPH+ERA5'] = dict()
-for var in var_list:
-    data['GLEAM+CMORPH+ERA5'][var] = dict()
+if 'GLEAM' in models.keys():
+    data['GLEAM+CMORPH+ERA5'] = dict()
+    for var in var_list:
+        data['GLEAM+CMORPH+ERA5'][var] = dict()
+        
+    data['GLEAM+CMORPH+ERA5']['pre'][''] = data['CMORPH']['pre']['']
+    data['GLEAM+CMORPH+ERA5']['sm1'][''] = data['GLEAM']['sm1'][''][:,:,1:-1].transpose('time', 'lat', 'lon')
+    data['GLEAM+CMORPH+ERA5']['evapot'][''] = data['GLEAM']['evapot'][''][:,:,1:-1].transpose('time', 'lat', 'lon')
     
-data['GLEAM+CMORPH+ERA5']['pre'][''] = data['CMORPH']['pre']['']
-data['GLEAM+CMORPH+ERA5']['sm1'][''] = data['GLEAM']['sm1'][''][:,:,1:-1].transpose('time', 'lat', 'lon')
-data['GLEAM+CMORPH+ERA5']['evapot'][''] = data['GLEAM']['evapot'][''][:,:,1:-1].transpose('time', 'lat', 'lon')
-
-for var in ['vimfc2d', 'orog', 'lsmask']:
-    data['GLEAM+CMORPH+ERA5'][var][''] = data['ERA5'][var][''][:,1:-2,:-1].rename({'longitude':'lon', 'latitude':'lat'})
+    for var in ['vimfc2d', 'orog', 'lsmask']:
+        data['GLEAM+CMORPH+ERA5'][var][''] = data['ERA5'][var][''][:,1:-2,:-1].rename({'longitude':'lon', 'latitude':'lat'})
+        
+    lat['GLEAM+CMORPH+ERA5'] = data['GLEAM+CMORPH+ERA5'][var]['']['lat']
+    lon['GLEAM+CMORPH+ERA5'] = data['GLEAM+CMORPH+ERA5'][var]['']['lon']
+    lonproj['GLEAM+CMORPH+ERA5'], latproj['GLEAM+CMORPH+ERA5'] = np.meshgrid(lon['GLEAM+CMORPH+ERA5'], lat['GLEAM+CMORPH+ERA5'])
     
-lat['GLEAM+CMORPH+ERA5'] = data['GLEAM+CMORPH+ERA5'][var]['']['lat']
-lon['GLEAM+CMORPH+ERA5'] = data['GLEAM+CMORPH+ERA5'][var]['']['lon']
-lonproj['GLEAM+CMORPH+ERA5'], latproj['GLEAM+CMORPH+ERA5'] = np.meshgrid(lon['GLEAM+CMORPH+ERA5'], lat['GLEAM+CMORPH+ERA5'])
+    data['GLEAM+CMORPH+ERA5']['pre'][''].coords['lon'] = data['GLEAM+CMORPH+ERA5']['pre']['']['lon']-0.125
+    data['GLEAM+CMORPH+ERA5']['pre'][''].coords['lat'] = data['GLEAM+CMORPH+ERA5']['pre']['']['lat']-0.125
+    
+    data['GLEAM+CMORPH+ERA5']['sm1'][''].coords['lon'] = data['GLEAM+CMORPH+ERA5']['sm1']['']['lon']-0.125
+    data['GLEAM+CMORPH+ERA5']['sm1'][''].coords['lat'] = data['GLEAM+CMORPH+ERA5']['sm1']['']['lat']-0.125
+    
+    data['GLEAM+CMORPH+ERA5']['evapot'][''].coords['lon'] = data['GLEAM+CMORPH+ERA5']['evapot']['']['lon']-0.125
+    data['GLEAM+CMORPH+ERA5']['evapot'][''].coords['lat'] = data['GLEAM+CMORPH+ERA5']['evapot']['']['lat']-0.125
+    
+    models = {'GLEAM+CMORPH+ERA5': "GLEAM+CMORPH+ERA5 "+start_date[0:4]+"-"+end_date[0:4]}
 
-data['GLEAM+CMORPH+ERA5']['pre'][''].coords['lon'] = data['GLEAM+CMORPH+ERA5']['pre']['']['lon']-0.125
-data['GLEAM+CMORPH+ERA5']['pre'][''].coords['lat'] = data['GLEAM+CMORPH+ERA5']['pre']['']['lat']-0.125
-
-data['GLEAM+CMORPH+ERA5']['sm1'][''].coords['lon'] = data['GLEAM+CMORPH+ERA5']['sm1']['']['lon']-0.125
-data['GLEAM+CMORPH+ERA5']['sm1'][''].coords['lat'] = data['GLEAM+CMORPH+ERA5']['sm1']['']['lat']-0.125
-
-data['GLEAM+CMORPH+ERA5']['evapot'][''].coords['lon'] = data['GLEAM+CMORPH+ERA5']['evapot']['']['lon']-0.125
-data['GLEAM+CMORPH+ERA5']['evapot'][''].coords['lat'] = data['GLEAM+CMORPH+ERA5']['evapot']['']['lat']-0.125
-
-models = {'GLEAM+CMORPH+ERA5': "GLEAM+CMORPH+ERA5 "+start_date[0:4]+"-"+end_date[0:4]}
+if 'GLDASNOAH' in models.keys():
+    data['GLDASNOAH+CMORPH+ERA5'] = dict()
+    for var in var_list:
+        data['GLDASNOAH+CMORPH+ERA5'][var] = dict()
+        
+    data['GLDASNOAH+CMORPH+ERA5']['pre'][''] = data['CMORPH']['pre']['']
+    data['GLDASNOAH+CMORPH+ERA5']['sm1'][''] = data['GLDASNOAH']['sm1'][''][:,1:-1,:-1]
+    #data['GLDASNOAH+CMORPH+ERA5']['evapot'][''] = data['GLDASNOAH']['evapot']['']
+    
+    for var in ['vimfc2d', 'orog', 'lsmask']:
+        data['GLDASNOAH+CMORPH+ERA5'][var][''] = data['ERA5'][var][''][:,1:-2,:-1].rename({'longitude':'lon', 'latitude':'lat'})
+        
+    lat['GLDASNOAH+CMORPH+ERA5'] = data['GLDASNOAH+CMORPH+ERA5'][var]['']['lat']
+    lon['GLDASNOAH+CMORPH+ERA5'] = data['GLDASNOAH+CMORPH+ERA5'][var]['']['lon']
+    lonproj['GLDASNOAH+CMORPH+ERA5'], latproj['GLDASNOAH+CMORPH+ERA5'] = np.meshgrid(lon['GLDASNOAH+CMORPH+ERA5'], lat['GLDASNOAH+CMORPH+ERA5'])
+    
+    data['GLDASNOAH+CMORPH+ERA5']['pre'][''].coords['lon'] = data['GLDASNOAH+CMORPH+ERA5']['pre']['']['lon']-0.125
+    data['GLDASNOAH+CMORPH+ERA5']['pre'][''].coords['lat'] = data['GLDASNOAH+CMORPH+ERA5']['pre']['']['lat']-0.125
+    
+    data['GLDASNOAH+CMORPH+ERA5']['sm1'][''].coords['lat'] = data['GLDASNOAH+CMORPH+ERA5']['sm1']['']['lat']-0.125
+    
+    
+    # data['GLDASNOAH+CMORPH+ERA5']['evapot'][''].coords['lon'] = data['GLDASNOAH+CMORPH+ERA5']['evapot']['']['lon']-0.125
+    # data['GLDASNOAH+CMORPH+ERA5']['evapot'][''].coords['lat'] = data['GLDASNOAH+CMORPH+ERA5']['evapot']['']['lat']-0.125
+    
+    models = {'GLDASNOAH+CMORPH+ERA5': "GLDASNOAH+CMORPH+ERA5 "+start_date[0:4]+"-"+end_date[0:4]}
 
 #%% --------- FILTRO LOS PUNTOS CON OROGRAFIA EMPINADA --------
 print('#########  Filtrando puntos de orografía empinada y enmascarando oceanos ##############')
@@ -1699,7 +1727,7 @@ barra = mcolors.ListedColormap([prebarra(int(round(x*prebarra.N/preclevs[-1]))) 
 clevs = np.concatenate((preclevs,preclevs2))
 
 if how=='%':
-    clevs = np.arange(0,11,1)
+    clevs = np.arange(0,30,1)
     barra = matplotlib.cm.get_cmap('Reds').copy() # premade colorbar
     barra.set_under('white')
 
@@ -1921,6 +1949,137 @@ for model in models.keys():
     # save 
     juli_functions.savefig(fig1, images_path, 'n_events_w_previousP_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+'_regimes'+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
 
+
+
+#%% ####### -----------------------  Number of afternoon P events with previous-day precipitation excluding events
+how = '%' # 'n' for absolute value, '%' for percentage of events 
+
+#creo data_day de pre
+if degrade: data_day_cut_dg=dict()
+    
+for model in models.keys():
+    # primero muevo el tiempo de pre a LST  (aprox, tomo UTC-3 para todo)
+    data[model]['pre'][''].coords[timename] = data[model]['pre'][''][timename] - 3*3600000000000
+    
+    data_day[model] = dict()
+    data_day[model]['pre'] = dict()
+    data_day[model]['pre'][''] = data[model]['pre'][''].loc[{timename: slice(start_date,end_date)}].resample({timename:'D'}).mean().compute()*mult_hd['pre'][model][0]
+    
+    data[model]['pre'][''].coords[timename] = data[model]['pre'][''][timename] + 3*3600000000000
+
+    data_day_cut[model]['pre'] = data_day[model]['pre'][''][season_sel(daily_time_months)].loc[{timename:slice(delta_period[0], delta_period[1])}]
+    
+    if degrade:
+        res_lat = [None if len(ys_e_cut[model][lat_name])%degrade_n==0 else len(ys_e_cut[model][lat_name])%degrade_n*-1][0]
+        res_lon = [None if len(ys_e_cut[model][lon_name])%degrade_n==0 else len(ys_e_cut[model][lon_name])%degrade_n*-1][0]
+
+        data_day_cut_dg[model]=dict()
+        data_day_cut_dg[model]['pre'] = xr.concat([data_day_cut[model]['pre'][:,i:res_lat:degrade_n,j:res_lon:degrade_n] for i,j in list(itertools.product(range(0,degrade_n), repeat=2))], dim=timename, join='override')   
+
+
+#################### set colorbar.
+preclevs = np.arange(0,110,10)
+prebarra = matplotlib.cm.get_cmap('Reds').copy() # premade colorbar
+prebarra.set_under('white')
+
+preclevs2 = np.arange(200,1100,100)
+prebarra2 = matplotlib.cm.get_cmap('summer').copy() # premade colorbar
+
+# Nueva barra
+barra = mcolors.ListedColormap([prebarra(int(round(x*prebarra.N/preclevs[-1]))) for x in preclevs[1:]]+[prebarra2(int(round(x*prebarra2.N/preclevs2[-1]))) for x in preclevs2[:]])
+#barra.set_over('Navy')
+clevs = np.concatenate((preclevs,preclevs2))
+
+if how=='%':
+    clevs = np.arange(0,110,10)
+    barra = matplotlib.cm.get_cmap('Reds').copy() # premade colorbar
+    barra.set_under('white')
+
+# new array with number of events
+n_cevents = dict()
+for model in models.keys():
+    n_cevents[model] = dict()
+    
+    if degrade:
+        shifted = (data_day_cut_dg[model]['pre'].shift({timename:1}) > 1)
+        consec = shifted * (~np.isnan(ys_e_cut_dg[model])) * (np.isnan(ys_e_cut_dg[model].shift({timename:1})) )
+        n_cevents[model]['all'] = (consec.sum(axis=0)).where(consec.sum(axis=0)!=0)
+        res_lat = [None if len(ys_e_cut_dg[model][lat_name])%degrade_n==0 else len(ys_e_cut_dg[model][lat_name])%degrade_n*-1][0]
+        res_lon = [None if len(ys_e_cut_dg[model][lon_name])%degrade_n==0 else len(ys_e_cut_dg[model][lon_name])%degrade_n*-1][0]
+    else:
+        shifted = (data_day_cut[model]['pre'].shift({timename:1}) > 1)
+        consec = shifted * (~np.isnan(ys_e_cut[model]))
+        n_cevents[model]['all'] = (consec.sum(axis=0)).where(consec.sum(axis=0)!=0)
+
+
+for model in models.keys():
+    # crear figura y axes
+    fig1, ax = juli_functions.make_figure(['Number' if how=='n' else '%' if how=='%' else 'wrong "how" selection'][0]+' of afternoon P events w/ previous-day non-ev P > 1mm \n'+model+' '+seas_name+' '+delta_period[0]+' - '+delta_period[1], figsize=(5,5), general_fontsize=9)
+
+    
+    plot = [n_cevents[model]['all'] if how=='n' else n_cevents[model]['all']/n_events[model]['all']*100 ][0]
+
+    if degrade:
+        CS1 = juli_functions.plot_pcolormesh(ax, plot, lon[model][:res_lon:degrade_n], lat[model][:res_lat:degrade_n], lonproj[model][:res_lat:degrade_n,:res_lon:degrade_n], latproj[model][:res_lat:degrade_n,:res_lon:degrade_n], proj,
+                                             clevs, barra, '', titlesize = 12, coastwidth = 1, countrywidth = 1)
+    else:
+        CS1 = juli_functions.plot_pcolormesh(ax, plot, lon[model], lat[model], lonproj[model], latproj[model], proj,
+                                             clevs, barra, '', titlesize = 12, coastwidth = 1, countrywidth = 1)
+    
+    # add colorbar
+    #fig1.subplots_adjust(right=0.1, left=, top=, bottom=)
+    juli_functions.add_colorbar(fig1, CS1, ['neither' if how=='%' and clevs[-1]==100 else 'max'][0], '', cbaxes= [0.9, 0.2, 0.02, 0.6]) #[*left*, *bottom*, *width*,  *height*]
+    
+    # save 
+    juli_functions.savefig(fig1, images_path, 'n_events_w_previousP_and_no_event_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
+
+
+
+#############################################
+# Plot of number of events (pixeled version) SEPARADO POR REGIMENES
+
+# new array with number of events
+for model in models.keys():
+    
+    for dr in ['low', 'mid', 'high']:
+        if degrade:
+            shifted = (data_day_cut_dg[model]['pre'].shift({timename:1}) ).where(~np.isnan(ys_e_cut_dg_dynreg[model][dr]))
+            consec = shifted > 1
+            n_cevents[model][dr] = (consec.sum(axis=0)).where(consec.sum(axis=0)!=0)
+        else:
+            shifted = (data_day_cut[model]['pre'].shift({timename:1}) > 1)
+            consec = shifted * cond_dr[model][dr]
+            aux = ys_e_cut[model].where(consec).count(axis=0)
+            n_cevents[model][dr] = aux.where(aux!=0).copy()
+
+
+for model in models.keys():
+    # crear figura y axes
+    fig1, ax = juli_functions.make_figure(['Number' if how=='n' else '%' if how=='%' else 'wrong "how" selection'][0]+' of afternoon P events w/ previous-day P > 1mm \n'+model+' '+seas_name+' '+delta_period[0]+' - '+delta_period[1], figsize=(13,5), general_fontsize=9)
+
+
+    # Si son muchos plots
+    ax.set_visible(False)
+    gs = gridspec.GridSpec(1,3, wspace=0, hspace=0.2) #si quiero multiples subplos
+    
+    for m, dr in enumerate(['low', 'mid', 'high']):
+        # Poner en loop si son muchos plot
+        ax1 = plt.subplot(gs[m], projection = proj)
+        
+        plot = [n_cevents[model][dr] if how=='n' else n_cevents[model][dr]/n_events[model][dr]*100 ][0]
+
+        if degrade:
+            CS1 = juli_functions.plot_pcolormesh(ax1, plot, lon[model][:res_lon:degrade_n], lat[model][:res_lat:degrade_n], lonproj[model][:res_lat:degrade_n,:res_lon:degrade_n], latproj[model][:res_lat:degrade_n,:res_lon:degrade_n], proj,
+                                                 clevs, barra, numbering[m]+' '+dr+' dynamic regime', titlesize = 12, coastwidth = 1, countrywidth = 1)
+        else:
+            CS1 = juli_functions.plot_pcolormesh(ax1, plot, lon[model], lat[model], lonproj[model], latproj[model], proj,
+                                                 clevs, barra, numbering[m]+' '+dr+' dynamic regime', titlesize = 12, coastwidth = 1, countrywidth = 1)
+    # add colorbar
+    #fig1.subplots_adjust(right=0.1, left=, top=, bottom=)
+    juli_functions.add_colorbar(fig1, CS1, ['neither' if how=='%' and clevs[-1]==100 else 'max'][0], '', cbaxes= [0.9, 0.2, 0.01, 0.6]) #[*left*, *bottom*, *width*,  *height*]
+    
+    # save 
+    juli_functions.savefig(fig1, images_path, 'n_events_w_previousP_and_no_event_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+'_regimes'+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
 
 
 #%% ####### -----------------------  Terrestrial and atmospheric coupling index (usa delta_period para recortar el periodo)
@@ -2266,7 +2425,12 @@ for model in models.keys():
         data[model][var][''].coords[timename] = data[model][var][''][timename] - 4*3600000000000
         
         data_day[model][var] = dict()
-        data_day[model][var][''] = data[model][var][''].loc[{timename: slice(start_date,end_date)}].resample({timename:'D'}).mean().compute()*mult_hd[var][model][0]
+        if var == 'sm1':
+            data_day[model][var][''] = data[model][var][''][data[model][var][''][timename+'.hour']==6].loc[{timename: slice(start_date,end_date)}].compute()*mult_hd[var][model][0]
+            #corro a la hora cero para que se seleccionen bien los dias luego
+            data_day[model][var][''].coords[timename] = data_day[model][var][''][timename] - 6*3600000000000
+        else:
+            data_day[model][var][''] = data[model][var][''].loc[{timename: slice(start_date,end_date)}].resample({timename:'D'}).mean().compute()*mult_hd[var][model][0]
         
         data[model][var][''].coords[timename] = data[model][var][''][timename] + 4*3600000000000
     
@@ -2277,24 +2441,32 @@ for model in models.keys():
 # new array with number of events
 pre_trend = dict()
 sm_trend = dict()
+sm_trend_box = dict() # data for the pixels surrounding the central
 for model in models.keys():
     pre_trend[model] = dict()
     sm_trend[model] = dict()
+    sm_trend_box[model] = dict()
     
     for dr in dr_to_plot:
         pre_trend[model][dr] = dict()
         sm_trend[model][dr] = dict()
+        sm_trend_box[model][dr] = dict()
 
         for reg in regions.keys():        
             if dr=='all':
                 pre_trend[model]['all'][reg] = list()
                 sm_trend[model]['all'][reg] = list()
+                sm_trend_box[model]['all'][reg] = list()
 
                 for shift in np.arange(-15, 16):
                     shiftedcond = ~np.isnan(ys_e_cut[model]).compute()
                     shiftedcond.coords[timename] = shiftedcond[timename] + shift*24*3600000000000
                     pre_trend[model]['all'][reg].append( float(data_day[model]['pre'][''].where(shiftedcond).loc[{timename:slice(delta_period[0], delta_period[1]), lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].mean(dim=(timename, lat_name, lon_name))) )
                     sm_trend[model]['all'][reg].append( float(data_day[model]['sm1'][''].where(shiftedcond).loc[{timename:slice(delta_period[0], delta_period[1]), lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].mean(dim=(timename, lat_name, lon_name))) )
+                    
+                    # repeat for SM in surrounding pixels
+                    shiftedcond_box = xr.concat([shiftedcond.shift({lat_name:ii, lon_name:jj}, fill_value=False) for ii,jj in list(itertools.product(range(-box_size2[0],box_size2[0]+1), repeat=2)) if (ii,jj)!=(0,0)], dim= 'shift').sum(dim='shift')
+                    sm_trend_box[model]['all'][reg].append( float(data_day[model]['sm1'][''].where(shiftedcond_box).loc[{timename:slice(delta_period[0], delta_period[1]), lat_name: slice(regions[reg][2], regions[reg][3]), lon_name: slice(regions[reg][0], regions[reg][1])}].mean(dim=(timename, lat_name, lon_name))) )
                 
             else:
                 pre_trend[model][dr][reg] = list()
@@ -2312,6 +2484,10 @@ rows= [len(dr_to_plot) if len(dr_to_plot)>1 else len(regions.keys())][0] #si tom
 cols= [len(regions.keys()) if len(dr_to_plot)>1 else 1][0]
 
 figsize= [(2,5) if cols==1 else (5,5)][0]
+
+barcolor= 'steelblue'
+centerbarcolor= '#f29f37' #'orange'
+linecolor= 'firebrick'# 'red'
 
 for model in models.keys():
     with plt.rc_context({'axes.edgecolor':'#212121', 'xtick.color':'#212121', 'ytick.color':'#212121'}):
@@ -2334,8 +2510,8 @@ for model in models.keys():
                 # Poner en loop si son muchos plot
                 ax1 = plt.subplot(gs[n])
                 
-                barax = plt.bar(np.arange(-15,16), pre_trend[model][dr][reg], color='steelblue')
-                plt.bar(0, pre_trend[model][dr][reg][15], color='Orange')
+                barax = plt.bar(np.arange(-15,16), pre_trend[model][dr][reg], color=barcolor)
+                plt.bar(0, pre_trend[model][dr][reg][15], color=centerbarcolor)
                 plt.ylim(ylims[l])
                 plt.yticks(yticks[l])
                 
@@ -2347,11 +2523,18 @@ for model in models.keys():
                 # juli_functions.plot_line(lineax, np.arange(-15,16), [np.array(sm_trend[model][dr][reg]).mean()]*31, None, None, None, None, None, title=[reg if n<3 else ''][0], xticksrot = 0, color='red', ls='dotted')
                 # juli_functions.plot_line(lineax, np.arange(-15,16), [np.array(sm_trend[model][dr][reg][0:15]).mean()]*15+[np.nan]*16, None, None, None, None, None, title=[reg if n<3 else ''][0], xticksrot = 0, color='red', ls='dotted')
                 
-                lineax.plot(np.arange(-15,16), sm_trend[model][dr][reg], color='red')
+                lineax.plot(np.arange(-15,16), sm_trend[model][dr][reg], color=linecolor)
                 
-                lineax.plot(np.arange(-15,16), [np.array(sm_trend[model][dr][reg]).mean()]*31, color='red', ls='dotted')
-                lineax.plot(np.arange(-15,16), [np.array(sm_trend[model][dr][reg][0:15]).mean()]*15+[np.nan]*16, color='red', ls='dotted')
+                lineax.plot(np.arange(-15,16), [np.array(sm_trend[model][dr][reg]).mean()]*31, color=linecolor, ls='dotted')
+                lineax.plot(np.arange(-15,16), [np.array(sm_trend[model][dr][reg][0:15]).mean()]*15+[np.nan]*16, color=linecolor, ls='dotted')
+                plt.ticklabel_format(axis="y", style="sci", scilimits=(0,0))
+                                     
+                # lo mismo para los puntos de alrededor
+                lineax.plot(np.arange(-15,16), sm_trend_box[model][dr][reg], color='#00441b')
                 
+                lineax.plot(np.arange(-15,16), [np.array(sm_trend_box[model][dr][reg]).mean()]*31, color='#00441b', ls='dotted')
+                lineax.plot(np.arange(-15,16), [np.array(sm_trend_box[model][dr][reg][0:15]).mean()]*15+[np.nan]*16, color='#00441b', ls='dotted')
+
                 #set subtitles
                 lineax.set_title([reg if n<3 and cols>1 else ''][0])
                 
@@ -2359,7 +2542,7 @@ for model in models.keys():
                 n=n+1
     
         # save 
-        juli_functions.savefig(fig1, images_path, 'mean_p_sm_trends_events_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+'.png')
+        juli_functions.savefig(fig1, images_path, 'mean_p_sm_trends_events_supplementary_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+'.png')
 
 
 
@@ -2558,7 +2741,7 @@ sm_aft_std=dict()
 sm_std_change=dict()
 sm_std_change0=dict()
 
-for model in ['RCA4']:
+for model in models.keys():
 
     print('..... '+model+' ....')
     
@@ -2588,9 +2771,15 @@ for model in ['RCA4']:
         # Muevo el tiempo, calculo y lo vuelvo al estado original
         data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] - zone*3600000000000
         
-        sm_mor[zone] = data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:(data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour'])==rango_sm[1], lon_name:slice(zonelimits[nn],zonelimits[nn+1])}]
-
-        sm_aft[zone] = data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:(data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour'])==rango_pre_aft[1], lon_name:slice(zonelimits[nn],zonelimits[nn+1])}]
+        if 'JRA-55' in model: 
+            sm_mor[zone] = data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:((data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour'])<=rango_sm[1] ) * ((data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour'])>rango_sm[1]-3), lon_name:slice(zonelimits[nn],zonelimits[nn+1])}]
+    
+            sm_aft[zone] = data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:((data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour'])<=rango_pre_aft[1]) * ((data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour'])>rango_pre_aft[1]-3), lon_name:slice(zonelimits[nn],zonelimits[nn+1])}]
+        
+        else:
+            sm_mor[zone] = data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:(data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour'])==rango_sm[1], lon_name:slice(zonelimits[nn],zonelimits[nn+1])}]
+    
+            sm_aft[zone] = data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:(data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour'])==rango_pre_aft[1], lon_name:slice(zonelimits[nn],zonelimits[nn+1])}]
 
         data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] + zone*3600000000000
         
@@ -2600,9 +2789,9 @@ for model in ['RCA4']:
     init_time = timeit.time.time()              
     
     # concateno    
-    data_sm_mor[model] = xr.concat([sm_mor[i] for i in timezones], dim=lon_name)
+    data_sm_mor[model] = xr.concat([sm_mor[i] for i in timezones], dim=lon_name, join='override')
 
-    data_sm_aft[model] = xr.concat([sm_aft[i] for i in timezones], dim=lon_name)
+    data_sm_aft[model] = xr.concat([sm_aft[i] for i in timezones], dim=lon_name, join='override')
 
     # calculo std de los alrededores
     sm_mor_std[model] = xr.concat([data_sm_mor[model].shift({lat_name:ii, lon_name:jj}) for ii,jj in list(itertools.product(range(-box_size2[0],box_size2[0]+1), repeat=2))], dim='shifted').std(dim='shifted')#.compute()
@@ -2662,6 +2851,7 @@ for model in models.keys():
     # barra de colores
     if 'RCA4' in model: clevs = np.arange(-0.0001, 0.000125, 0.000025) 
     if 'ERA5' in model: clevs = np.arange(-0.001, 0.00125, 0.00025) 
+    if 'JRA-55' in model: clevs = np.arange(-0.05, 0.06, 0.01) 
 
     barra= juli_functions.barra_zerocenter(clevs ,colormap=matplotlib.cm.get_cmap('RdBu'), no_extreme_colors=True)
     barra.set_over('#053061')
@@ -2682,6 +2872,54 @@ for model in models.keys():
     # save 
     juli_functions.savefig(fig1, images_path, 'mean_heterog_change_'+model+'_'+delta_period[0][0:4]+'-'+delta_period[1][0:4]+'_'+seas_name+['_degraded'+str(degrade_n) if degrade else ''][0]+'.png')
 
+
+#%% ####### -----------------------  Ejemplo de deteccion de eventos
+latslice=slice(-8.25,-6.5)
+lonslice=slice(-64,-62.25)
+
+colorbar = mcolors.ListedColormap(['#fff5eb','#fee6ce','#fdd0a2','#fdae6b','#6baed6','#4292c6','#2171b5','#08519c','#08306b'])
+
+datatoplot = (data_aft['ERA5']['pre'][102,:,:].loc[{lat_name:latslice, lon_name:lonslice}]/pre_multipliers)
+
+
+
+#intento 1
+plt.figure( figsize=(6,5),dpi=300) 
+datatoplot.plot(cmap=plt.cm.Blues, levels=[0,1,2,3,4,5,6,7,8], hatch='x')
+
+plt.pcolor(datatoplot.longitude, datatoplot.latitude, datatoplot.where(datatoplot<4), shading= 'nearest', cmap=mcolors.ListedColormap(['none']),  hatch='.', edgecolor='lightgray', lw=0)
+
+#intento 2
+fig1, ax = juli_functions.make_figure('example event', figsize=(5,5), general_fontsize=9)
+
+clevs=[0,1,2,3,4,5,6,7,8,9]
+barra= matplotlib.cm.get_cmap('Blues')
+norm = mcolors.BoundaryNorm(boundaries=clevs, ncolors=barra.N)
+
+CS1 = plt.pcolormesh(datatoplot.longitude, datatoplot.latitude, datatoplot, shading= 'nearest', cmap=plt.cm.Blues, norm=norm)
+
+plt.colorbar(extend='max')
+
+juli_functions.add_colorbar(fig1, CS1, 'max', units_labels['pre'], cbaxes= [0.9, 0.2, 0.02, 0.6]) #[*left*, *bottom*, *width*,  *height*]
+
+
+
+#intento 3
+# crear figura y axes
+fig1, ax = juli_functions.make_figure('example event', figsize=(5,5), general_fontsize=9)
+    
+clevs=[0,1,2,3,4,5,6,7,8]
+barra= juli_functions.barra_zerocenter(clevs ,colormap=matplotlib.cm.get_cmap('Blues'), no_extreme_colors=True)
+barra.set_over('#053061')
+barra.set_under('#67001f')
+
+
+CS1 = juli_functions.plot_pcolormesh(ax, datatoplot, datatoplot.longitude, datatoplot.latitude, datatoplot.longitude, datatoplot.latitude, proj,
+                                         clevs, barra, '', titlesize = 12, coastwidth = 1, countrywidth = 1)
+
+# add colorbar
+#fig1.subplots_adjust(right=0.1, left=, top=, bottom=)
+juli_functions.add_colorbar(fig1, CS1, 'both', units_labels['sm1'], cbaxes= [0.9, 0.2, 0.02, 0.6]) #[*left*, *bottom*, *width*,  *height*]
 
 
 #%%exit the program early
