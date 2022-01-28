@@ -29,6 +29,7 @@ Created on Thu Apr 12 10:54:12 2018
 # Version 14: Missing feature added: now non-events with morning P>pre_mor_max in adjacent tiles are also filtered out. 
 # Version 15: minor bug fixed: SM anomalies calculated only from morning values (instead of daily averages). Forced SM from UNC to be fixed to the mean annual wave.
 # Version 16: bug fixed: improved way to select timezone bands (some hours from the day after the event were being left out)
+# Version 17: added condition to test whether the SM increases after the afternoon P event (useful for mixed SM and P datasets)
 
 
 
@@ -94,19 +95,19 @@ var_list = ['pre','lhf','shf','lwr','swr','t2m','slp','u900','v900','uv900conv',
 var_list = ['pre', 'sm1', 'vimfc2d', 'evapot', 'orog', 'lsmask'] # la orografia tiene que ir ultima
 
 chunksize = 1000  # tamaño de los chunks para dask
-start_date = '1983-01-01'
+start_date = '1998-01-01'
 end_date = '2012-12-31'
 
 models = {
-          'RCA4': "RCA4 "+start_date[0:4]+"-"+end_date[0:4],
+#          'RCA4': "RCA4 "+start_date[0:4]+"-"+end_date[0:4],
 #          'RCA4CLIM': "RCA4CLIM "+start_date[0:4]+"-"+end_date[0:4],
 #          'LMDZ': "LMDZ "+start_date[0:4]+"-"+end_date[0:4],
 #          'TRMM-3B42': "TRMM-3B42 V7 1998-2012",
-#          'CMORPH': "CMORPH V1.0 1998-2012",
+          'CMORPH': "CMORPH V1.0 1998-2012",
 #          'JRA-55': "JRA-55 "+start_date[0:4]+"-"+end_date[0:4],
-#          'ERA5': "ERA5 "+start_date[0:4]+"-"+end_date[0:4],
+          'ERA5': "ERA5 "+start_date[0:4]+"-"+end_date[0:4],
 #          'GLEAM': "GLEAM "+start_date[0:4]+"-"+end_date[0:4],
-#          'GLDASNOAH': "GLDASNOAH "+start_date[0:4]+"-"+end_date[0:4],
+          'GLDASNOAH': "GLDASNOAH "+start_date[0:4]+"-"+end_date[0:4],
 #          'ESACCI': "ESA-CCI "+start_date[0:4]+"-"+end_date[0:4],
           }
 latlims=(-57,13.5) # custom lat limits for loading the data (default is -50.3, 13.5)
@@ -119,8 +120,8 @@ seas_warm = [1,2,3,10,11,12] # En que meses quiero la estacion a considerar (inc
 seas_cold = [4,5,6,7,8,9]
 homepath = '/home/julian.giles/datos/'
 data_path = '/datosfreyja/d1/GDATA/'
-temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run5_v16'
-images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run5_v16/'
+temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run9_v17/'
+images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run9_v17/'
 font_size = 20 # font size for all elements
 proj = ccrs.PlateCarree(central_longitude=0.0)  # Proyeccion cyl eq
 
@@ -199,10 +200,13 @@ pre_multipliers = 1#/1000  # para acomodar las unidades de precipitación. Ej: E
 if 'ERA5' in models: pre_multipliers = 1/1000
 
 ys_calculation_type = 'min' # 'min' for comparison against min P point, 'mean' for comparison against sorrounding mean 
-delta_period = ('1983-01-01', '2012-12-31') # (start_date, end_date) Período sobre el cual calcular los deltas (puedo tener todo el proceso de eventos hecho para un periodo mas largo y dsps elegir sub periodo para los delta finales)
+delta_period = ('1998-01-01', '2012-12-31') # (start_date, end_date) Período sobre el cual calcular los deltas (puedo tener todo el proceso de eventos hecho para un periodo mas largo y dsps elegir sub periodo para los delta finales)
 load_deltas = False # load previously calculated deltas?
 seas = set([10,11,12,1,2,3]) # set([12,1,2])# set([4,5,6,7,8,9]) # set([1,2,3,10,11,12]) # En que meses quiero la estacion a considerar (incluidos)
 seas_name = 'ONDJFM' # Para los títulos
+
+# test for increase in SM after afternoon P event?
+test_increase_sm = True
 
 # rangos horarios, recordar que ahora los timesteps indican el inicio del intervalo (forward_timestep=True)
 rango_sm = (6,11) # Rango de horas para SM (en la mañana)
@@ -213,14 +217,14 @@ if 'RCA4' in models or 'RCA4CLIM' in models: rango_sm = (6,8); rango_pre_mor = (
 pre_mor_max = 1*pre_multipliers # Máxima prec en la mañana en mm
 pre_aft_min = 4*pre_multipliers # Mínima prec en la tarde en mm
 
-delta_orog_lim = 360  # Máximo cambio en orografía admitido dentro de la caja 3x3 en metros (para 0.25 seria 180, para 0.5 seria 360)
+delta_orog_lim = 180  # Máximo cambio en orografía admitido dentro de la caja 3x3 en metros (para 0.25 seria 180, para 0.5 seria 360)
 box_size = (3,3) # Dimensiones (horizontal,vertical) de la caja de los eventos (en puntos de grilla) 
 box_size2 = (int((box_size[0]-1)/2), int((box_size[1]-1)/2)) # para uso en el calculo
 bootslength = 1000 # Cantidad de valores del bootstrapping
 min_events = 25 # minimo de eventos que tiene que haber para plotear el resultado (solo aplica a los graficos)
 
 degrade = True # degradar la reticula para agrupar eventos?
-degrade_n = 3 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
+degrade_n = 6 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
 if degrade_n >0: degrade =True
 
 n_rollmean = 31 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
@@ -261,31 +265,58 @@ if 'GLEAM' in models.keys():
     
     models = {'GLEAM+CMORPH+ERA5': "GLEAM+CMORPH+ERA5 "+start_date[0:4]+"-"+end_date[0:4]}
 
+######### DEPRECATED, NEW VERSION BELOW
+# if 'GLDASNOAH' in models.keys():
+#     data['GLDASNOAH+CMORPH+ERA5'] = dict()
+#     for var in var_list:
+#         data['GLDASNOAH+CMORPH+ERA5'][var] = dict()
+        
+#     data['GLDASNOAH+CMORPH+ERA5']['pre'][''] = data['CMORPH']['pre']['']
+#     data['GLDASNOAH+CMORPH+ERA5']['sm1'][''] = data['GLDASNOAH']['sm1'][''][:,1:-1,:-1]
+#     #data['GLDASNOAH+CMORPH+ERA5']['evapot'][''] = data['GLDASNOAH']['evapot']['']
+    
+#     for var in ['vimfc2d', 'orog', 'lsmask']:
+#         data['GLDASNOAH+CMORPH+ERA5'][var][''] = data['ERA5'][var][''][:,1:-2,:-1].rename({'longitude':'lon', 'latitude':'lat'})
+        
+#     lat['GLDASNOAH+CMORPH+ERA5'] = data['GLDASNOAH+CMORPH+ERA5'][var]['']['lat']
+#     lon['GLDASNOAH+CMORPH+ERA5'] = data['GLDASNOAH+CMORPH+ERA5'][var]['']['lon']
+#     lonproj['GLDASNOAH+CMORPH+ERA5'], latproj['GLDASNOAH+CMORPH+ERA5'] = np.meshgrid(lon['GLDASNOAH+CMORPH+ERA5'], lat['GLDASNOAH+CMORPH+ERA5'])
+    
+#     data['GLDASNOAH+CMORPH+ERA5']['pre'][''].coords['lon'] = data['GLDASNOAH+CMORPH+ERA5']['pre']['']['lon']-0.125
+#     data['GLDASNOAH+CMORPH+ERA5']['pre'][''].coords['lat'] = data['GLDASNOAH+CMORPH+ERA5']['pre']['']['lat']-0.125
+    
+#     data['GLDASNOAH+CMORPH+ERA5']['sm1'][''].coords['lat'] = data['GLDASNOAH+CMORPH+ERA5']['sm1']['']['lat']-0.125
+    
+    
+#     # data['GLDASNOAH+CMORPH+ERA5']['evapot'][''].coords['lon'] = data['GLDASNOAH+CMORPH+ERA5']['evapot']['']['lon']-0.125
+#     # data['GLDASNOAH+CMORPH+ERA5']['evapot'][''].coords['lat'] = data['GLDASNOAH+CMORPH+ERA5']['evapot']['']['lat']-0.125
+    
+#     models = {'GLDASNOAH+CMORPH+ERA5': "GLDASNOAH+CMORPH+ERA5 "+start_date[0:4]+"-"+end_date[0:4]}
+
 if 'GLDASNOAH' in models.keys():
+    # creo diccionario
     data['GLDASNOAH+CMORPH+ERA5'] = dict()
     for var in var_list:
         data['GLDASNOAH+CMORPH+ERA5'][var] = dict()
-        
+
+    # Muevo las lon/lat para que coincidan
+    data['CMORPH']['pre'][''].coords['lon'] = data['CMORPH']['pre']['']['lon']-0.125
+    data['CMORPH']['pre'][''].coords['lat'] = data['CMORPH']['pre']['']['lat']-0.125
+    
+    data['GLDASNOAH']['sm1'][''].coords['lat'] = data['GLDASNOAH']['sm1']['']['lat']-0.125
+
+    # asigno variables 
     data['GLDASNOAH+CMORPH+ERA5']['pre'][''] = data['CMORPH']['pre']['']
-    data['GLDASNOAH+CMORPH+ERA5']['sm1'][''] = data['GLDASNOAH']['sm1'][''][:,1:-1,:-1]
+    data['GLDASNOAH+CMORPH+ERA5']['sm1'][''] = data['GLDASNOAH']['sm1'][''].where(data['CMORPH']['pre'][''][0]+1)
     #data['GLDASNOAH+CMORPH+ERA5']['evapot'][''] = data['GLDASNOAH']['evapot']['']
     
     for var in ['vimfc2d', 'orog', 'lsmask']:
-        data['GLDASNOAH+CMORPH+ERA5'][var][''] = data['ERA5'][var][''][:,1:-2,:-1].rename({'longitude':'lon', 'latitude':'lat'})
+        data['GLDASNOAH+CMORPH+ERA5'][var][''] = data['ERA5'][var][''].rename({'longitude':'lon', 'latitude':'lat'}).where(data['CMORPH']['pre'][''][0]+1)
         
     lat['GLDASNOAH+CMORPH+ERA5'] = data['GLDASNOAH+CMORPH+ERA5'][var]['']['lat']
     lon['GLDASNOAH+CMORPH+ERA5'] = data['GLDASNOAH+CMORPH+ERA5'][var]['']['lon']
     lonproj['GLDASNOAH+CMORPH+ERA5'], latproj['GLDASNOAH+CMORPH+ERA5'] = np.meshgrid(lon['GLDASNOAH+CMORPH+ERA5'], lat['GLDASNOAH+CMORPH+ERA5'])
-    
-    data['GLDASNOAH+CMORPH+ERA5']['pre'][''].coords['lon'] = data['GLDASNOAH+CMORPH+ERA5']['pre']['']['lon']-0.125
-    data['GLDASNOAH+CMORPH+ERA5']['pre'][''].coords['lat'] = data['GLDASNOAH+CMORPH+ERA5']['pre']['']['lat']-0.125
-    
-    data['GLDASNOAH+CMORPH+ERA5']['sm1'][''].coords['lat'] = data['GLDASNOAH+CMORPH+ERA5']['sm1']['']['lat']-0.125
-    
-    
-    # data['GLDASNOAH+CMORPH+ERA5']['evapot'][''].coords['lon'] = data['GLDASNOAH+CMORPH+ERA5']['evapot']['']['lon']-0.125
-    # data['GLDASNOAH+CMORPH+ERA5']['evapot'][''].coords['lat'] = data['GLDASNOAH+CMORPH+ERA5']['evapot']['']['lat']-0.125
-    
+        
     models = {'GLDASNOAH+CMORPH+ERA5': "GLDASNOAH+CMORPH+ERA5 "+start_date[0:4]+"-"+end_date[0:4]}
 
 #%% --------- FILTRO LOS PUNTOS CON OROGRAFIA EMPINADA --------
@@ -456,6 +487,14 @@ def sm_morning(hour):
     return (hour >= rango_sm[0]) & (hour <= rango_sm[1])
 
 
+# ESTO SOLO PARA CASOS DONDE LOS DATASET DE P Y SM SON DE DISTINTA FUENTE Y QUIERO CHEQUEAR QUE COINCIDE LA P CON UN AUMENTO DE SM
+def sm_afternoon(hour):
+    return (hour >= rango_pre_aft[1]-3) & (hour <= rango_pre_aft[1])
+
+sm_daily_aft = dict()
+sm_increase = dict()
+
+
 print('########## CALCULANDO ##############')
 for model in models.keys():
     print('..... '+model+' ....')
@@ -478,6 +517,10 @@ for model in models.keys():
     pre_aft = dict()
     sm_mor = dict()
     vimfc2d_day = dict()
+
+
+    sm_aft = dict()
+
     
     # creo datos diarios sumando/promediando las horas de interés para cada caso
     print('calculando por franjas horarias')
@@ -498,7 +541,9 @@ for model in models.keys():
         
         if 'GLEAM' not in model:            
             sm_mor[zone] = data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:sm_morning(data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour']), lon_name:slice(zonelimits[nn],zonelimits[nn+1])}].resample({timename:'D'}).mean().compute()
-
+            
+            if test_increase_sm:  
+                sm_aft[zone] = data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}].loc[{timename:sm_afternoon(data[model]['sm1'][''].loc[{timename:slice(start_date, end_date)}][timename+'.hour']), lon_name:slice(zonelimits[nn],zonelimits[nn+1])}].resample({timename:'D'}).mean().compute()
 
         data[model]['pre'][''].coords[timename] = data[model]['pre'][''][timename] + zone*3600000000000
         data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] + zone*3600000000000
@@ -530,6 +575,12 @@ for model in models.keys():
         # data[model]['sm1'][''].coords[timename] = data[model]['sm1'][''][timename] + 4*3600000000000
                 
         sm_daily[model] = xr.concat([sm_mor[i] for i in timezones], dim=lon_name)
+
+        if test_increase_sm:  
+            sm_daily_aft[model] = xr.concat([sm_aft[i] for i in timezones], dim=lon_name)
+            if len(sm_daily_aft[model]) < len(sm_daily[model]): sm_daily_aft[model] = xr.concat([sm_daily_aft[model], sm_daily[model][-(len(sm_daily[model]) - len(sm_daily_aft[model])):]], dim='time')
+            sm_increase[model] = sm_daily_aft[model] > sm_daily[model]
+
 
         if dayofyear_smanom:
             sm_daily_doy[model] = sm_daily[model].groupby(timename+'.dayofyear').mean(dim=timename, skipna=True) 
@@ -580,6 +631,10 @@ for model in models.keys():
     data_day[model]['vimfc2d'] = xr.open_dataarray(temp_path+'/vimfc2d_day_'+model+'.nc')
 
 
+    if test_increase_sm:  
+        sm_increase[model].to_netcdf(temp_path+'/sm_increase_'+model+'.nc')
+        sm_increase[model] = xr.open_dataarray(temp_path+'/sm_increase_'+model+'.nc')
+
 
 #%% ---------- IDENTIFICO LOS EVENTOS Y CALCULO LAS METRICAS ------------------
 ys_e = dict()
@@ -616,6 +671,9 @@ for model in models.keys():
 
     # junto las condiciones 
     pre_cond_event[model] = (pre_cond1 * pre_cond11 * pre_cond2)
+
+    if test_increase_sm:  
+        pre_cond_event[model] = pre_cond1 * pre_cond11 * pre_cond2 * sm_increase[model]
 
     print(str(round((timeit.time.time()-init_time)/60,2))+' min')
 
@@ -1353,7 +1411,7 @@ for model in models.keys():
     clevs = np.array([0,1,2.5,5,10,90,95,97.5,99,100])        # Esta es la escala que usa Guillod
 
     # barra de colores
-    barra= juli_functions.barra_whitecenter(clevs ,colormap=matplotlib.cm.get_cmap('RdBu'), no_extreme_colors=True)
+    barra= juli_functions.barra_whitecenter(clevs ,colormap=matplotlib.cm.get_cmap('RdBu'), no_extreme_colors=True, normalize=False)
     
     barra = mcolors.ListedColormap([(235/255,235/255,235/255) if x in np.arange(int(barra.N*0.4), int(barra.N*0.6)) else barra(x) for x in np.arange(0, barra.N)])
 
@@ -1417,7 +1475,7 @@ for model in ['RCA4']:
         clevs = np.array([0,1,2.5,5,10,90,95,97.5,99,100])        # Esta es la escala que usa Guillod
     
         # barra de colores
-        barra= juli_functions.barra_whitecenter(clevs ,colormap=matplotlib.cm.get_cmap('RdBu'), no_extreme_colors=True)
+        barra= juli_functions.barra_whitecenter(clevs ,colormap=matplotlib.cm.get_cmap('RdBu'), no_extreme_colors=True, normalize=False)
         
         barra = mcolors.ListedColormap([(235/255,235/255,235/255) if x in np.arange(int(barra.N*0.4), int(barra.N*0.6)) else barra(x) for x in np.arange(0, barra.N)])
     
@@ -1530,7 +1588,7 @@ for model in models.keys():
         clevs = np.array([0,1,2.5,5,10,90,95,97.5,99,100])        # Esta es la escala que usa Guillod
     
         # barra de colores
-        barra= juli_functions.barra_whitecenter(clevs ,colormap=matplotlib.cm.get_cmap('RdBu'), no_extreme_colors=True)
+        barra= juli_functions.barra_whitecenter(clevs ,colormap=matplotlib.cm.get_cmap('RdBu'), no_extreme_colors=True, normalize=False)
         
         barra = mcolors.ListedColormap([(235/255,235/255,235/255) if x in np.arange(int(barra.N*0.4), int(barra.N*0.6)) else barra(x) for x in np.arange(0, barra.N)])
     
@@ -2731,6 +2789,12 @@ for model in models.keys():
 
 
 #%% ####### -----------------------  Cambio de heterogeneidad debido al evento
+
+#############################
+########################
+#################               CHEQUEAR: no estoy seguro al mover el tiempo a LST, luego seleccionar, y volver a moverlo, si la seleccion se queda en el tiempo LST o si se vuelve a mover
+#########################
+##############################
 
 data_sm_mor = dict()
 data_sm_aft = dict()
