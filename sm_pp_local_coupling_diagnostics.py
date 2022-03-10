@@ -95,20 +95,20 @@ var_list = ['pre','lhf','shf','lwr','swr','t2m','slp','u900','v900','uv900conv',
 var_list = ['pre', 'sm1', 'vimfc2d', 'evapot', 'orog', 'lsmask'] # la orografia tiene que ir ultima
 
 chunksize = 1000  # tamaño de los chunks para dask
-start_date = '1998-01-01'
+start_date = '1983-01-01'
 end_date = '2012-12-31'
 
 models = {
-#          'RCA4': "RCA4 "+start_date[0:4]+"-"+end_date[0:4],
-#          'RCA4CLIM': "RCA4CLIM "+start_date[0:4]+"-"+end_date[0:4],
+          'RCA4': "RCA4 "+start_date[0:4]+"-"+end_date[0:4],
+          'RCA4CLIM': "RCA4CLIM "+start_date[0:4]+"-"+end_date[0:4],
 #          'LMDZ': "LMDZ "+start_date[0:4]+"-"+end_date[0:4],
 #          'TRMM-3B42': "TRMM-3B42 V7 1998-2012",
-          'CMORPH': "CMORPH V1.0 1998-2012",
+#          'CMORPH': "CMORPH V1.0 1998-2012",
 #          'JRA-55': "JRA-55 "+start_date[0:4]+"-"+end_date[0:4],
           'ERA5': "ERA5 "+start_date[0:4]+"-"+end_date[0:4],
-#          'GLEAM': "GLEAM "+start_date[0:4]+"-"+end_date[0:4],
+          'GLEAM': "GLEAM "+start_date[0:4]+"-"+end_date[0:4],
           'GLDASNOAH': "GLDASNOAH "+start_date[0:4]+"-"+end_date[0:4],
-#          'ESACCI': "ESA-CCI "+start_date[0:4]+"-"+end_date[0:4],
+          'ESACCI': "ESA-CCI "+start_date[0:4]+"-"+end_date[0:4],
           }
 latlims=(-57,13.5) # custom lat limits for loading the data (default is -50.3, 13.5)
 load_raw = True # cargar todos los datos originales crudos?
@@ -120,8 +120,8 @@ seas_warm = [1,2,3,10,11,12] # En que meses quiero la estacion a considerar (inc
 seas_cold = [4,5,6,7,8,9]
 homepath = '/home/julian.giles/datos/'
 data_path = '/datosfreyja/d1/GDATA/'
-temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run9_v17/'
-images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run9_v17/'
+temp_path = '/home/julian.giles/datos/temp/heterog_sm_pp/run5_v17/'
+images_path = '/home/julian.giles/datos/CTL/Images/heterogeneity_sm_pre_taylor_guillod/run5_v17/'
 font_size = 20 # font size for all elements
 proj = ccrs.PlateCarree(central_longitude=0.0)  # Proyeccion cyl eq
 
@@ -198,15 +198,17 @@ matplotlib.rcParams.update({'font.size':font_size}) #Change font size for all el
 #%% ---------- PARÁMETROS ----------
 pre_multipliers = 1#/1000  # para acomodar las unidades de precipitación. Ej: ERA5 viene en m/h, entonces hay q dividir los umbrales por mil para q sean las mismas unidades
 if 'ERA5' in models: pre_multipliers = 1/1000
+if 'GLDASNOAH' in models: pre_multipliers = 1/(3*60*60)
+if 'CMORPH' in models: pre_multipliers = 1
 
 ys_calculation_type = 'min' # 'min' for comparison against min P point, 'mean' for comparison against sorrounding mean 
-delta_period = ('1998-01-01', '2012-12-31') # (start_date, end_date) Período sobre el cual calcular los deltas (puedo tener todo el proceso de eventos hecho para un periodo mas largo y dsps elegir sub periodo para los delta finales)
+delta_period = ('1983-01-01', '2012-12-31') # (start_date, end_date) Período sobre el cual calcular los deltas (puedo tener todo el proceso de eventos hecho para un periodo mas largo y dsps elegir sub periodo para los delta finales)
 load_deltas = False # load previously calculated deltas?
 seas = set([10,11,12,1,2,3]) # set([12,1,2])# set([4,5,6,7,8,9]) # set([1,2,3,10,11,12]) # En que meses quiero la estacion a considerar (incluidos)
 seas_name = 'ONDJFM' # Para los títulos
 
 # test for increase in SM after afternoon P event?
-test_increase_sm = True
+test_increase_sm = False
 
 # rangos horarios, recordar que ahora los timesteps indican el inicio del intervalo (forward_timestep=True)
 rango_sm = (6,11) # Rango de horas para SM (en la mañana)
@@ -217,14 +219,18 @@ if 'RCA4' in models or 'RCA4CLIM' in models: rango_sm = (6,8); rango_pre_mor = (
 pre_mor_max = 1*pre_multipliers # Máxima prec en la mañana en mm
 pre_aft_min = 4*pre_multipliers # Mínima prec en la tarde en mm
 
-delta_orog_lim = 180  # Máximo cambio en orografía admitido dentro de la caja 3x3 en metros (para 0.25 seria 180, para 0.5 seria 360)
+delta_orog_lim = 180 # Máximo cambio en orografía admitido dentro de la caja 3x3 en metros (para 0.25 seria 180, para 0.5 seria 360)
 box_size = (3,3) # Dimensiones (horizontal,vertical) de la caja de los eventos (en puntos de grilla) 
+if 'RCA4' in models: delta_orog_lim = 360
+ 
 box_size2 = (int((box_size[0]-1)/2), int((box_size[1]-1)/2)) # para uso en el calculo
 bootslength = 1000 # Cantidad de valores del bootstrapping
 min_events = 25 # minimo de eventos que tiene que haber para plotear el resultado (solo aplica a los graficos)
 
 degrade = True # degradar la reticula para agrupar eventos?
 degrade_n = 6 # numero de puntos de reticula a agrupar (degrade_n x degrade_n)
+if 'RCA4' in models: degrade_n = 3
+
 if degrade_n >0: degrade =True
 
 n_rollmean = 31 # nro de dias de referencia para tomar la anomalia (si es centrada tiene que ser impar)
@@ -265,59 +271,59 @@ if 'GLEAM' in models.keys():
     
     models = {'GLEAM+CMORPH+ERA5': "GLEAM+CMORPH+ERA5 "+start_date[0:4]+"-"+end_date[0:4]}
 
-######### DEPRECATED, NEW VERSION BELOW
-# if 'GLDASNOAH' in models.keys():
-#     data['GLDASNOAH+CMORPH+ERA5'] = dict()
-#     for var in var_list:
-#         data['GLDASNOAH+CMORPH+ERA5'][var] = dict()
-        
-#     data['GLDASNOAH+CMORPH+ERA5']['pre'][''] = data['CMORPH']['pre']['']
-#     data['GLDASNOAH+CMORPH+ERA5']['sm1'][''] = data['GLDASNOAH']['sm1'][''][:,1:-1,:-1]
-#     #data['GLDASNOAH+CMORPH+ERA5']['evapot'][''] = data['GLDASNOAH']['evapot']['']
-    
-#     for var in ['vimfc2d', 'orog', 'lsmask']:
-#         data['GLDASNOAH+CMORPH+ERA5'][var][''] = data['ERA5'][var][''][:,1:-2,:-1].rename({'longitude':'lon', 'latitude':'lat'})
-        
-#     lat['GLDASNOAH+CMORPH+ERA5'] = data['GLDASNOAH+CMORPH+ERA5'][var]['']['lat']
-#     lon['GLDASNOAH+CMORPH+ERA5'] = data['GLDASNOAH+CMORPH+ERA5'][var]['']['lon']
-#     lonproj['GLDASNOAH+CMORPH+ERA5'], latproj['GLDASNOAH+CMORPH+ERA5'] = np.meshgrid(lon['GLDASNOAH+CMORPH+ERA5'], lat['GLDASNOAH+CMORPH+ERA5'])
-    
-#     data['GLDASNOAH+CMORPH+ERA5']['pre'][''].coords['lon'] = data['GLDASNOAH+CMORPH+ERA5']['pre']['']['lon']-0.125
-#     data['GLDASNOAH+CMORPH+ERA5']['pre'][''].coords['lat'] = data['GLDASNOAH+CMORPH+ERA5']['pre']['']['lat']-0.125
-    
-#     data['GLDASNOAH+CMORPH+ERA5']['sm1'][''].coords['lat'] = data['GLDASNOAH+CMORPH+ERA5']['sm1']['']['lat']-0.125
-    
-    
-#     # data['GLDASNOAH+CMORPH+ERA5']['evapot'][''].coords['lon'] = data['GLDASNOAH+CMORPH+ERA5']['evapot']['']['lon']-0.125
-#     # data['GLDASNOAH+CMORPH+ERA5']['evapot'][''].coords['lat'] = data['GLDASNOAH+CMORPH+ERA5']['evapot']['']['lat']-0.125
-    
-#     models = {'GLDASNOAH+CMORPH+ERA5': "GLDASNOAH+CMORPH+ERA5 "+start_date[0:4]+"-"+end_date[0:4]}
 
 if 'GLDASNOAH' in models.keys():
-    # creo diccionario
-    data['GLDASNOAH+CMORPH+ERA5'] = dict()
-    for var in var_list:
-        data['GLDASNOAH+CMORPH+ERA5'][var] = dict()
-
-    # Muevo las lon/lat para que coincidan
-    data['CMORPH']['pre'][''].coords['lon'] = data['CMORPH']['pre']['']['lon']-0.125
-    data['CMORPH']['pre'][''].coords['lat'] = data['CMORPH']['pre']['']['lat']-0.125
+    if 'CMORPH' in models.keys():
+        # creo diccionario
+        data['GLDASNOAH+CMORPH+ERA5'] = dict()
+        for var in var_list:
+            data['GLDASNOAH+CMORPH+ERA5'][var] = dict()
     
-    data['GLDASNOAH']['sm1'][''].coords['lat'] = data['GLDASNOAH']['sm1']['']['lat']-0.125
-
-    # asigno variables 
-    data['GLDASNOAH+CMORPH+ERA5']['pre'][''] = data['CMORPH']['pre']['']
-    data['GLDASNOAH+CMORPH+ERA5']['sm1'][''] = data['GLDASNOAH']['sm1'][''].where(data['CMORPH']['pre'][''][0]+1)
-    #data['GLDASNOAH+CMORPH+ERA5']['evapot'][''] = data['GLDASNOAH']['evapot']['']
+        # Muevo las lon/lat para que coincidan
+        data['CMORPH']['pre'][''].coords['lon'] = data['CMORPH']['pre']['']['lon']-0.125
+        data['CMORPH']['pre'][''].coords['lat'] = data['CMORPH']['pre']['']['lat']-0.125
+        
+        data['GLDASNOAH']['sm1'][''].coords['lat'] = data['GLDASNOAH']['sm1']['']['lat']-0.125
     
-    for var in ['vimfc2d', 'orog', 'lsmask']:
-        data['GLDASNOAH+CMORPH+ERA5'][var][''] = data['ERA5'][var][''].rename({'longitude':'lon', 'latitude':'lat'}).where(data['CMORPH']['pre'][''][0]+1)
+        # asigno variables 
+        data['GLDASNOAH+CMORPH+ERA5']['pre'][''] = data['CMORPH']['pre']['']
+        data['GLDASNOAH+CMORPH+ERA5']['sm1'][''] = data['GLDASNOAH']['sm1'][''].where(data['CMORPH']['pre'][''][0]+1) # el where es porque la reticula de CMORPH es la mas chica
+        #data['GLDASNOAH+CMORPH+ERA5']['evapot'][''] = data['GLDASNOAH']['evapot']['']
         
-    lat['GLDASNOAH+CMORPH+ERA5'] = data['GLDASNOAH+CMORPH+ERA5'][var]['']['lat']
-    lon['GLDASNOAH+CMORPH+ERA5'] = data['GLDASNOAH+CMORPH+ERA5'][var]['']['lon']
-    lonproj['GLDASNOAH+CMORPH+ERA5'], latproj['GLDASNOAH+CMORPH+ERA5'] = np.meshgrid(lon['GLDASNOAH+CMORPH+ERA5'], lat['GLDASNOAH+CMORPH+ERA5'])
+        for var in ['vimfc2d', 'orog', 'lsmask']:
+            data['GLDASNOAH+CMORPH+ERA5'][var][''] = data['ERA5'][var][''].rename({'longitude':'lon', 'latitude':'lat'}).where(data['CMORPH']['pre'][''][0]+1)
+            
+        lat['GLDASNOAH+CMORPH+ERA5'] = data['GLDASNOAH+CMORPH+ERA5'][var]['']['lat']
+        lon['GLDASNOAH+CMORPH+ERA5'] = data['GLDASNOAH+CMORPH+ERA5'][var]['']['lon']
+        lonproj['GLDASNOAH+CMORPH+ERA5'], latproj['GLDASNOAH+CMORPH+ERA5'] = np.meshgrid(lon['GLDASNOAH+CMORPH+ERA5'], lat['GLDASNOAH+CMORPH+ERA5'])
+            
+        models = {'GLDASNOAH+CMORPH+ERA5': "GLDASNOAH+CMORPH+ERA5 "+start_date[0:4]+"-"+end_date[0:4]}
+    
+    else:
+        # creo diccionario
+        data['GLDASNOAH+ERA5'] = dict()
+        for var in var_list:
+            data['GLDASNOAH+ERA5'][var] = dict()
+    
+        # Muevo las lon/lat para que coincidan
         
-    models = {'GLDASNOAH+CMORPH+ERA5': "GLDASNOAH+CMORPH+ERA5 "+start_date[0:4]+"-"+end_date[0:4]}
+        data['GLDASNOAH']['sm1'][''].coords['lat'] = data['GLDASNOAH']['sm1']['']['lat']-0.125
+        data['GLDASNOAH']['pre'][''].coords['lat'] = data['GLDASNOAH']['pre']['']['lat']-0.125
+    
+        # asigno variables 
+        data['GLDASNOAH+ERA5']['pre'][''] = data['GLDASNOAH']['pre']['']
+        data['GLDASNOAH+ERA5']['sm1'][''] = data['GLDASNOAH']['sm1']['']
+        #data['GLDASNOAH+CMORPH+ERA5']['evapot'][''] = data['GLDASNOAH']['evapot']['']
+        
+        for var in ['vimfc2d', 'orog', 'lsmask']:
+            data['GLDASNOAH+ERA5'][var][''] = data['ERA5'][var][''].rename({'longitude':'lon', 'latitude':'lat'}).where(data['GLDASNOAH']['pre'][''][0]+1) # el where es porque la reticula de CMORPH es la mas chica
+            
+        lat['GLDASNOAH+ERA5'] = data['GLDASNOAH+ERA5'][var]['']['lat']
+        lon['GLDASNOAH+ERA5'] = data['GLDASNOAH+ERA5'][var]['']['lon']
+        lonproj['GLDASNOAH+ERA5'], latproj['GLDASNOAH+ERA5'] = np.meshgrid(lon['GLDASNOAH+ERA5'], lat['GLDASNOAH+ERA5'])
+            
+        models = {'GLDASNOAH+ERA5': "GLDASNOAH+ERA5 "+start_date[0:4]+"-"+end_date[0:4]}
+        
 
 #%% --------- FILTRO LOS PUNTOS CON OROGRAFIA EMPINADA --------
 print('#########  Filtrando puntos de orografía empinada y enmascarando oceanos ##############')
@@ -3161,258 +3167,84 @@ for model in ['RCA4']:
     
 
 
-#%%
-############################################
-##
-#           PLOTS (pcolormesh)
-##
-############################################
-# mean of values Y
-ys_e_mean = np.nanmean(ys_e_cut, axis= 0)
-yt_e_mean = np.nanmean(yt_e_cut, axis= 0)
-yh_e_mean = np.nanmean(yh_e_cut, axis= 0)
-ys_c_mean = np.nanmean(ys_c_cut, axis= 0)
-yt_c_mean = np.nanmean(yt_c_cut, axis= 0)
-yh_c_mean = np.nanmean(yh_c_cut, axis= 0)
+#%%%% ---------------- Intercomparación de variabilidades de SM de distintas fuentes
+model='RCA4'
+seas = 'ONDJFM'
+var = 'sm1'
+
+data['GLEAM'][var][seas] = data['GLEAM'][var][seas].transpose('time', 'lat', 'lon')
+
+mult = {'RCA4': 1/0.07,
+        'RCA4CLIM': 1/0.07,
+        'ERA5': 1,
+        'GLEAM': 1,
+        'GLDASNOAH': 1/1000/0.1,
+        'ESACCI': 1}
+
+################# Variabilidad interanual diaria
+data_D = dict()
+data_D_iv = dict()
+for nax, model in enumerate(models.keys()):
+    print(model)
+    if 'GLEAM' in model: data_D[model] = data['GLEAM'][var][seas]
+    else: data_D[model] = data[model][var][seas].resample({'time':'D'}).mean()*mult[model]
+    
+    data_D_iv[model] = (data_D[model].groupby('time.dayofyear') - data_D[model].groupby('time.dayofyear').mean() ).std(dim='time').compute()
+
+
+# crear figura y axes
+fig1, ax = juli_functions.make_figure('', figsize=(10,8), general_fontsize=10) #fig size in inches (width, height)
+
+# Si son muchos plots
+ax.set_visible(False)
+gs = gridspec.GridSpec(2,3, wspace=0.01, hspace=0.2) #si quiero multiples subplos
+
+for nax, model in enumerate(models.keys()):
+    # Poner en loop si son muchos plot
+    ax1 = plt.subplot(gs[nax], projection = proj)
+    
+    # barra de colores
+    clevs = np.arange(0,0.1,0.01)
+    barra= juli_functions.barra_whitecenter(clevs ,colormap=matplotlib.cm.get_cmap('Reds'), no_extreme_colors=True)
+    barra.set_over('Black')
+    barra.set_under('white')
+
+    pll = (False, False)
+    if nax == 0:
+        pll = (False, True)
+    elif nax == gs.nrows*gs.ncols-gs.ncols:
+        pll = (True, True)
+    elif int(nax/gs.ncols) == gs.nrows-1:
+        pll = (True, False)
+
+    # hago cada plot
+    if model in ['RCA4', 'RCA4CLIM', 'ERA5']:
+        CS1 = juli_functions.plot_pcolormesh(ax1, data_D_iv[model].where(data[model]['lsmask'][seas][0]), lon[model], lat[model], lonproj[model], latproj[model],
+                                         proj, clevs, barra, model, titlesize = 12, coastwidth = 1, countrywidth = 1, printlonslats=pll)
+    else:
+        CS1 = juli_functions.plot_pcolormesh(ax1, data_D_iv[model], lon[model], lat[model], lonproj[model], latproj[model],
+                                         proj, clevs, barra, model, titlesize = 12, coastwidth = 1, countrywidth = 1, printlonslats=pll)        
         
-# new array with number of events
-n_events = np.sum(~np.isnan(ys_e_cut), axis=0, dtype= float)
-for i in range(len(lat_RCA)):
-    for j in range(len(lon_RCA)):
-        if ((i,j) in valid_gridpoints) == 0:
-            n_events[i,j] = np.nan
-
-#############################################
-# Plot of event Y (pixeled version)
-fig1 = plt.figure( figsize=(18*3/2,20/2),dpi=300)  #fig size in inches
-for vv,sub,var,clevs,ext in [(ys_e_mean,1,'Ys_e',np.arange(-2E-4,2.5E-4,5E-5),'both'),
-                         (yt_e_mean,2,'Yt_e',np.arange(-6E-4,7E-4,10E-5),'both'),
-                         (yh_e_mean,3,'Yh_e',np.arange(0,6.5E-4,5E-5),'max')]:
-    # ------------- BARRA DE COLORES -------------------
-    # set colorbar.
-    barra = matplotlib.cm.get_cmap('Blues') # premade colorbar
-
-    if ext == 'both':
-        barra = matplotlib.cm.get_cmap('RdYlBu') # premade colorbar
-        import matplotlib.colors as mcolors
-        mincolor = barra(0)
-        maxcolor = barra(250)
-        medio1 = barra(64)
-        medio2 = barra(155)
-        mitadbarra = abs(min(clevs))/(max(clevs)+abs(min(clevs)))
-        barra = mcolors.LinearSegmentedColormap.from_list('BWR', [(0, mincolor),	
-                                                                      (mitadbarra/2, medio1),
-                                                                      (mitadbarra-(1-mitadbarra)/(sum(clevs>0)+1), 'white'),
-                                                                      (mitadbarra+(1-mitadbarra)/(sum(clevs>0)+1), 'white'),
-                                                                      ((1+mitadbarra)/2, medio2),
-                                                                      (1, maxcolor)])
-    
-    norm = mcolors.BoundaryNorm(boundaries=clevs, ncolors=256)
-    
-    nc_new = maskoceans(lonproj,latproj,vv, resolution="f", inlands = False, grid = 1.25)     # Mask oceans
-    nc_new2 = ma.masked_invalid(nc_new)
-    
-    sub1 = fig1.add_subplot(1,3,sub)
-    CS1 = mapproj.pcolormesh(lonproj, latproj,nc_new2,norm=norm, cmap=barra) #extended generate pretty colorbar
-    #color lower and upper colorbar triangles
-    barra.set_under('Maroon')
-    barra.set_over('Navy')
-    
-    mapproj.drawcoastlines()          # coast
-    mapproj.drawcountries(linewidth=2.0)           # countries
-    parallels = np.arange(-90,20,10.)
-    meridians = np.arange(-80,-30,10.)
-    mapproj.drawmeridians(meridians, labels = [False, False, False, True])  # labels = [left,right,top,bottom]
-    mapproj.drawparallels(parallels, labels = [True, False, False, False])  # dibujar paralelos
-     
-    # add colorbar
-    cb = mapproj.colorbar(CS1,"right", extend=ext) 
-    cb.formatter.set_powerlimits((0, 0))  # scientific notation
-    cb.update_ticks()
-    cb.set_label('m', labelpad = -10)
-    sub1.set_title(str(var)+' '+modelo+' '+seas_name)
-
-fig1.savefig(images_path+'y_events_RCA_CTL_1983-2012_pixeled.jpg',dpi=300,bbox_inches='tight',orientation='landscape',papertype='A4')
-#tight option adjuts paper size to figure
-
-#############################################
-# Plot of number of events (pixeled version)
-fig1 = plt.figure( figsize=(18/2,20/2),dpi=300)  #fig size in inches
-ax = fig1.add_axes([0.1,0.1,0.8,0.8])
-# ------------- BARRA DE COLORES -------------------
-# set colorbar.
-barra = matplotlib.cm.get_cmap('RdYlBu', 15) # premade colorbar
-
-nc_new = maskoceans(lonproj,latproj,n_events[:,:], resolution="f", inlands = False, grid = 1.25)     # Mask oceans
-nc_new2 = ma.masked_invalid(nc_new)
-
-CS1 = mapproj.pcolormesh(lonproj, latproj,nc_new2,vmin= 0, vmax=150, cmap=barra) #extended generate pretty colorbar
-#color lower and upper colorbar triangles
-barra.set_under(barra(0))
-barra.set_over('Navy')
-    
-mapproj.drawcoastlines()          # coast
-mapproj.drawcountries(linewidth=2.0)           # countries
-parallels = np.arange(-90,20,10.)
-meridians = np.arange(-80,-30,10.)
-mapproj.drawmeridians(meridians, labels = [False, False, False, True])  # labels = [left,right,top,bottom]
-mapproj.drawparallels(parallels, labels = [True, False, False, False])  # dibujar paralelos
- 
 # add colorbar
-cb = mapproj.colorbar(CS1,"right", extend='max') 
-ax.set_title('Number of afternoon precip events \n '+modelo+' '+seas_name)
+#fig1.subplots_adjust(right=, left=, top=, bottom=)
+cbar = juli_functions.add_colorbar(fig1, CS1, 'max', '$\mathregular{m^3⋅m^{-3}}$', cientific=(0,0),  cbaxes= [0.9, 0.2, 0.02, 0.6], labelpad=4) #[*left*, *bottom*, *width*,  *height*]
 
-fig1.savefig(images_path+'n_events_RCA_CTL_1983-2012_pixeled.jpg',dpi=300,bbox_inches='tight',orientation='landscape',papertype='A4')
-#tight option adjuts paper size to figure
+# save 
+juli_functions.savefig(fig1, '/home/julian.giles/datos/CTL/Images/climatologies/', 'daily_anom_std_sm1_'+'_'.join(models.keys())+'_'+seas+'_'+start_date[0:4]+'-'+end_date[0:4]+'.png')
 
-#############################################
-# Plot of control Y (pixeled version)
-fig1 = plt.figure( figsize=(18*3/2,20/2),dpi=300)  #fig size in inches
-for vv,sub,var,clevs,ext in [(ys_c_mean,1,'Ys_c',np.arange(-0.2E-4,0.2E-4,0.2E-5),'both'),
-                         (yt_c_mean,2,'Yt_c',np.arange(-1E-4,1.1E-4,1E-5),'both'),
-                         (yh_c_mean,3,'Yh_c',np.arange(0,6.5E-4,5E-5),'max')]:
-    # ------------- BARRA DE COLORES -------------------
-    # set colorbar.
-    barra = matplotlib.cm.get_cmap('Blues') # premade colorbar
-
-    if ext == 'both':
-        barra = matplotlib.cm.get_cmap('RdYlBu') # premade colorbar
-        import matplotlib.colors as mcolors
-        mincolor = barra(0)
-        maxcolor = barra(250)
-        medio1 = barra(64)
-        medio2 = barra(155)
-        mitadbarra = abs(min(clevs))/(max(clevs)+abs(min(clevs)))
-        barra = mcolors.LinearSegmentedColormap.from_list('BWR', [(0, mincolor),	
-                                                                      (mitadbarra/2, medio1),
-                                                                      (mitadbarra-(1-mitadbarra)/(sum(clevs>0)+1), 'white'),
-                                                                      (mitadbarra+(1-mitadbarra)/(sum(clevs>0)+1), 'white'),
-                                                                      ((1+mitadbarra)/2, medio2),
-                                                                      (1, maxcolor)])
+############# Variabilidad diaria sin media movil 90 dias
+matplotlib.rcParams.update({'font.size':6})
+fig, axs = plt.subplots(2, 3, figsize=(9,6), subplot_kw=dict(projection=proj), sharex=True, sharey=True)
+for nax, model in enumerate(models.keys()):
+    (data_D[model] - data_D[model].compute().rolling({'time':90}, center=True, min_periods=45).mean() ).std(dim='time').plot(ax=axs.flatten()[nax], vmin=0, vmax=0.1, cmap='Reds')
+    axs.flatten()[nax].set_title(model)
     
-    norm = mcolors.BoundaryNorm(boundaries=clevs, ncolors=256)
-    
-    nc_new = maskoceans(lonproj,latproj,vv, resolution="f", inlands = False, grid = 1.25)     # Mask oceans
-    nc_new2 = ma.masked_invalid(nc_new)
-    
-    sub1 = fig1.add_subplot(1,3,sub)
-    CS1 = mapproj.pcolormesh(lonproj, latproj,nc_new2,norm=norm, cmap=barra) #extended generate pretty colorbar
-    #color lower and upper colorbar triangles
-    barra.set_under('Maroon')
-    barra.set_over('Navy')
-    
-    mapproj.drawcoastlines()          # coast
-    mapproj.drawcountries(linewidth=2.0)           # countries
-    parallels = np.arange(-90,20,10.)
-    meridians = np.arange(-80,-30,10.)
-    mapproj.drawmeridians(meridians, labels = [False, False, False, True])  # labels = [left,right,top,bottom]
-    mapproj.drawparallels(parallels, labels = [True, False, False, False])  # dibujar paralelos
-     
-    # add colorbar
-    cb = mapproj.colorbar(CS1,"right", extend=ext) 
-    cb.formatter.set_powerlimits((0, 0))  # scientific notation
-    cb.update_ticks()
-    cb.set_label('m', labelpad = -10)
-    sub1.set_title(str(var)+' '+modelo+' '+seas_name)
+############# Variabilidad total (ciudado que GLEAM es diario asi que la variabilidad diurna no está incluida)
+matplotlib.rcParams.update({'font.size':6})
+fig, axs = plt.subplots(2, 3, figsize=(9,6), subplot_kw=dict(projection=proj), sharex=True, sharey=True)
+for nax, model in enumerate(models.keys()):
+    (data[model][var][seas].std(dim='time')*mult[model]).plot(ax=axs.flatten()[nax], vmin=0, vmax=0.1, cmap='Reds')
+    axs.flatten()[nax].set_title(model)
 
-fig1.savefig(images_path+'y_control_RCA_CTL_1983-2012_pixeled.jpg',dpi=300,bbox_inches='tight',orientation='landscape',papertype='A4')
-#tight option adjuts paper size to figure
 
-#######################################
-# Plot of delta percentile (pixeled version)
-delta_e_ys_perc = np.zeros((len(lat_RCA), len(lon_RCA)))
-delta_e_yt_perc = np.zeros((len(lat_RCA), len(lon_RCA)))
-delta_e_yh_perc = np.zeros((len(lat_RCA), len(lon_RCA)))
 
-for i in np.arange(0, len(lat_RCA),1):
-    for j in np.arange(0, len(lon_RCA),1):
-        delta_e_ys_perc[i,j]= np.mean([])
-        delta_e_yt_perc[i,j]= np.mean([])
-        delta_e_yh_perc[i,j]= np.mean([])
-
-from scipy import stats
-
-for i,j in valid_gridpoints:
-    delta_e_ys_perc[i,j]= stats.percentileofscore(delta_ys[i,j], delta_e_ys[i,j])
-    delta_e_yt_perc[i,j]= stats.percentileofscore(delta_yt[i,j], delta_e_yt[i,j])
-    delta_e_yh_perc[i,j]= stats.percentileofscore(delta_yh[i,j], delta_e_yh[i,j])
-
-fig1 = plt.figure( figsize=(18*3/2,20/2),dpi=300)  #fig size in inches
-for vv,sub,var in [(delta_e_ys_perc,1,'delta_e_ys'),
-                         (delta_e_yt_perc,2,'delta_e_yt'),
-                         (delta_e_yh_perc,3,'delta_e_yh')]:
-    # ------------- BARRA DE COLORES -------------------
-    # set colorbar.
-    clevs = [0,1,2.5,5,10,20,80,90,95,97.5,99,100]
-    clevs = [0,1,2.5,5,10,90,95,97.5,99,100]        # Esta es la escala que usa Guillod
-    barra = matplotlib.cm.get_cmap('RdYlBu') # premade colorbar
-    
-    import matplotlib.colors as mcolors
-    mincolor = barra(0)
-    maxcolor = barra(250)
-    medio1 = barra(64)
-    medio2 = barra(155)    
-    barra = mcolors.LinearSegmentedColormap.from_list('BWR', [(0, mincolor),	
-                                                              (0.2, medio1),
-                                                              (0.5, (235/255,235/255,235/255)), #'Linen'
-                                                              (0.6, medio2),
-                                                              (1, maxcolor)])
-    
-    norm = mcolors.BoundaryNorm(boundaries=clevs, ncolors=256)
-    
-    nc_new = maskoceans(lonproj,latproj,vv, resolution="f", inlands = False, grid = 1.25)     # Mask oceans
-    nc_new2 = ma.masked_invalid(nc_new)
-    
-    sub1 = fig1.add_subplot(1,3,sub)
-    CS1 = mapproj.pcolormesh(lonproj, latproj,nc_new2,norm=norm, cmap=barra) 
-    
-    mapproj.drawcoastlines()          # coast
-    mapproj.drawcountries(linewidth=2.0)           # countries
-    parallels = np.arange(-90,20,10.)
-    meridians = np.arange(-80,-30,10.)
-    mapproj.drawmeridians(meridians, labels = [False, False, False, True])  # labels = [left,right,top,bottom]
-    mapproj.drawparallels(parallels, labels = [True, False, False, False])  # dibujar paralelos
-     
-    # add colorbar
-    cb = mapproj.colorbar(CS1,"right") 
-    cb.set_label('%', labelpad = -10)
-    cb.set_ticks(clevs)
-    sub1.set_title('Percentile corresponding to '+str(var)+' \n '+modelo+' '+seas_name)
-
-fig1.savefig(images_path+'delta_percentile2_RCA_CTL_1983-2012_pixeled.jpg',dpi=300,bbox_inches='tight',orientation='landscape',papertype='A4')
-#tight option adjuts paper size to figure
-
-#######################################
-# Plot of event persistence (pixeled version)
-
-aux = ys_e_cut[0:-1]+ys_e_cut[1:]
-consec_events =  np.count_nonzero(~np.isnan(aux), axis=0)
-del(aux)
-
-fig1 = plt.figure( figsize=(18/2,20/2),dpi=300)  #fig size in inches
-ax = fig1.add_axes([0.1,0.1,0.8,0.8])
-# ------------- BARRA DE COLORES -------------------
-# set colorbar.
-barra = matplotlib.cm.get_cmap('RdYlBu', 15) # premade colorbar
-
-nc_new = maskoceans(lonproj,latproj,consec_events[:,:], resolution="f", inlands = False, grid = 1.25)     # Mask oceans
-nc_new2 = ma.masked_invalid(nc_new)
-
-CS1 = mapproj.pcolormesh(lonproj, latproj,nc_new2,vmin= 0, vmax=50, cmap=barra) #extended generate pretty colorbar
-#color lower and upper colorbar triangles
-barra.set_under(barra(0))
-barra.set_over('Navy')
-    
-mapproj.drawcoastlines()          # coast
-mapproj.drawcountries(linewidth=2.0)           # countries
-parallels = np.arange(-90,20,10.)
-meridians = np.arange(-80,-30,10.)
-mapproj.drawmeridians(meridians, labels = [False, False, False, True])  # labels = [left,right,top,bottom]
-mapproj.drawparallels(parallels, labels = [True, False, False, False])  # dibujar paralelos
- 
-# add colorbar
-cb = mapproj.colorbar(CS1,"right", extend='max') 
-ax.set_title('Number of consecutive afternoon precip events \n '+modelo+' '+seas_name)
-
-fig1.savefig(images_path+'n_consec_events_RCA_CTL_1983-2012_pixeled.jpg',dpi=300,bbox_inches='tight',orientation='landscape',papertype='A4')
-#tight option adjuts paper size to figure
